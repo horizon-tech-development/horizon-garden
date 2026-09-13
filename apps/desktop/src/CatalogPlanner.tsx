@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import {
   filterPlantCatalog,
+  buildHarvestSchedule,
   growingEnvironments,
   growingSeasons,
   recommendCompanions,
@@ -33,6 +34,7 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
     [environment, query, season]
   );
   const companions = useMemo(() => recommendCompanions(selectedPlantId), [selectedPlantId]);
+  const harvestSchedule = useMemo(() => buildHarvestSchedule(placements), [placements]);
 
   async function placeCrop(event: FormEvent) {
     event.preventDefault();
@@ -105,6 +107,17 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
         const plant = starterPlantCatalog.find((entry) => entry.id === placement.plantId);
         return <div key={placement.id}><strong>{plant?.commonName ?? placement.plantId}</strong><span>{placement.quantity} planted · {placement.plantedOn}</span>{placement.notes && <small>{placement.notes}</small>}</div>;
       })}</div>}
+
+      {harvestSchedule.length > 0 && <section className="schedule" aria-labelledby="schedule-heading">
+        <div><span className="step">Estimated timeline</span><h3 id="schedule-heading">Harvest schedule</h3><p>Actual harvest timing varies with variety, weather, and growing conditions.</p></div>
+        <div className="schedule-list">{harvestSchedule.map((item) => (
+          <article key={item.placementId}>
+            <strong>{item.plantName}</strong>
+            <span>Planted <time dateTime={item.plantedOn}>{item.plantedOn}</time></span>
+            <span>Estimated harvest: <time dateTime={item.earliestHarvestOn}>{item.earliestHarvestOn}</time> – <time dateTime={item.latestHarvestOn}>{item.latestHarvestOn}</time></span>
+          </article>
+        ))}</div>
+      </section>}
     </section>
   );
 }

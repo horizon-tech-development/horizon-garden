@@ -41,6 +41,12 @@ button, input, select { font: inherit; }
 .placement-list { margin-top: 24px; }
 .placement-list > div { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; border-top: 1px solid #e3e9df; padding: 12px 0; }
 .placement-list small { grid-column: 1 / -1; color: #5b755f; }
+.schedule { margin-top: 26px; border-top: 1px solid #d8e1d3; padding-top: 22px; }
+.schedule h3 { margin: 6px 0; }
+.schedule > div > p { color: #53675a; }
+.schedule-list { display: grid; gap: 10px; }
+.schedule-list article { display: grid; grid-template-columns: minmax(100px,.7fr) 1fr 1.6fr; gap: 12px; align-items: center; border-radius: 12px; background: #edf5ea; padding: 14px; }
+.schedule-list span { color: #53675a; font-size: .86rem; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
 h2 { margin: 6px 0 0; font-size: 1.6rem; }
 .status { max-width: 390px; border-radius: 12px; background: #edf5ea; color: #2f633b; padding: 10px 14px; font-size: .9rem; }
@@ -69,6 +75,7 @@ button:disabled { cursor: wait; opacity: .65; }
   .panel-heading { display: grid; }
   .form-grid, .dimensions, .calculations, .catalog-filters { grid-template-columns: 1fr; }
   .full-width { grid-column: auto; }
+  .schedule-list article { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
