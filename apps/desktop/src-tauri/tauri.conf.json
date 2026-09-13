@@ -13,5 +13,5 @@
     "windows": [{ "title": "Horizon Garden", "width": 1100, "height": 820, "minWidth": 760, "minHeight": 620 }],
     "security": { "csp": null }
   },
-  "bundle": { "active": true, "targets": "all" }
+  "bundle": { "active": true, "targets": "all", "icon": [] }
 }
