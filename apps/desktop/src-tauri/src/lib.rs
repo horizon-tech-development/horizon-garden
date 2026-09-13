@@ -63,6 +63,52 @@ struct GardenSetupSnapshot {
     updated_at: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CropPlacementInput {
+    growing_area_id: String,
+    plant_id: String,
+    quantity: i64,
+    planted_on: String,
+    notes: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CropPlacement {
+    id: String,
+    growing_area_id: String,
+    plant_id: String,
+    quantity: i64,
+    planted_on: String,
+    notes: String,
+    created_at: String,
+}
+
+const STARTER_PLANT_IDS: [&str;  8] = [
+    "plant-tomato", "plant-pepper", "plant-lettuce", "plant-carrot",
+    "plant-basil", "plant-garlic", "plant-marigold", "plant-chives",
+];
+
+fn validate_placement(input: &CropPlacementInput) -> Result<(), AppError> {
+    if input.growing_area_id.trim().is_empty() {
+        return Err(AppError::Validation("A growing area is required.".into()));
+    }
+    if !STARTER_PLANT_IDS.contains(&input.plant_id.as_str()) {
+        return Err(AppError::Validation("Select a known plant.".into()));
+    }
+    if !(1..=10_000).contains(&input.quantity) {
+        return Err(AppError::Validation("Quantity must be between 1 and 10,000.".into()));
+    }
+    if chrono::NaiveDate::parse_from_str(&input.planted_on, "%Y-%m-%d").is_err() {
+        return Err(AppError::Validation("Planting date is invalid.".into()));
+    }
+    if input.notes.chars().count() > 1_000 {
+        return Err(AppError::Validation("Notes cannot exceed 1,000 characters.".into()));
+    }
+    Ok(())
+}
+
 fn validate_input(input: &GardenSetupInput) -> Result<(), AppError> {
     let names = [
         ("Workspace name", input.workspace_name.trim()),
@@ -144,8 +190,19 @@ fn migrate(connection: &Connection) -> Result<(), AppError> {
            created_at TEXT NOT NULL,
            updated_at TEXT NOT NULL
          );
+         CREATE TABLE IF NOT EXISTS crop_placements (
+           id TEXT PRIMARY KEY,
+           growing_area_id TEXT NOT NULL REFERENCES growing_areas(id) ON DELETE CASCADE,
+           plant_id TEXT NOT NULL,
+           quantity INTEGER NOT NULL CHECK(quantity > 0),
+           planted_on TEXT NOT NULL,
+           notes TEXT NOT NULL DEFAULT '',
+           created_at TEXT NOT NULL
+         );
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
-         VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
+         VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+         INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+         VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
     )?;
     Ok(())
 }
@@ -249,6 +306,60 @@ fn save_setup(
     })
 }
 
+#[tauri::command]
+fn load_placements(database: State<'_, Database>) -> Result<Vec<CropPlacement>, AppError> {
+    let connection = database.0.lock().expect("database lock poisoned");
+    let mut statement = connection.prepare(
+        "SELECT id, growing_area_id, plant_id, quantity, planted_on, notes, created_at
+         FROM crop_placements ORDER BY planted_on, created_at",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(CropPlacement {
+            id: row.get(0)?,
+            growing_area_id: row.get(1)?,
+            plant_id: row.get(2)?,
+            quantity: row.get(3)?,
+            planted_on: row.get(4)?,
+            notes: row.get(5)?,
+            created_at: row.get(6)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+#[tauri::command]
+fn save_placement(
+    input: CropPlacementInput,
+    database: State<'_, Database>,
+) -> Result<CropPlacement, AppError> {
+    validate_placement(&input)?;
+    let connection = database.0.lock().expect("database lock poisoned");
+    let area_exists: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM growing_areas WHERE id = ?1)",
+        [&input.growing_area_id],
+        |row| row.get(0),
+    )?;
+    if !area_exists {
+        return Err(AppError::Validation("The selected growing area does not exist.".into()));
+    }
+    let placement = CropPlacement {
+        id: Uuid::now_v7().to_string(),
+        growing_area_id: input.growing_area_id.trim().to_owned(),
+        plant_id: input.plant_id,
+        quantity: input.quantity,
+        planted_on: input.planted_on,
+        notes: input.notes.trim().to_owned(),
+        created_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+    };
+    connection.execute(
+        "INSERT INTO crop_placements(id, growing_area_id, plant_id, quantity, planted_on, notes, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![placement.id, placement.growing_area_id, placement.plant_id, placement.quantity,
+                placement.planted_on, placement.notes, placement.created_at],
+    )?;
+    Ok(placement)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -258,7 +369,12 @@ pub fn run() {
             app.manage(Database(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![load_setup, save_setup])
+        .invoke_handler(tauri::generate_handler![
+            load_setup,
+            save_setup,
+            load_placements,
+            save_placement
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Horizon Garden");
 }
@@ -311,6 +427,18 @@ mod tests {
         let version: i64 = connection
             .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| row.get(0))
             .expect("migration version");
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
+    }
+
+    #[test]
+    fn rejects_unknown_plant_at_native_boundary() {
+        let input = CropPlacementInput {
+            growing_area_id: "area".into(),
+            plant_id: "unknown".into(),
+            quantity: 1,
+            planted_on: "2026-09-13".into(),
+            notes: String::new(),
+        };
+        assert!(matches!(validate_placement(&input), Err(AppError::Validation(_))));
     }
 }

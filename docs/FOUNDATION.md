@@ -12,3 +12,5 @@ Slice 1 proves the local-first desktop foundation:
 - Durable UUIDv7 identities preserved across edits
 
 The browser preview uses local storage only so frontend work can run outside Tauri. Packaged desktop builds always use the SQLite backend.
+
+Slice 2 adds the bundled starter plant catalog and durable crop placements described in docs/validation/slice-2-acceptance.md.

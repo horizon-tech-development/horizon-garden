@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { GardenSetupInput, GardenSetupSnapshot } from "@horizon-garden/domain";
+import type { CropPlacement, CropPlacementInput, GardenSetupInput, GardenSetupSnapshot } from "@horizon-garden/domain";
 
 const previewStorageKey = "horizon-garden-preview-snapshot";
+const previewPlacementsKey = "horizon-garden-preview-placements";
 
 function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window;
@@ -29,4 +30,22 @@ export async function saveSetup(input: GardenSetupInput): Promise<GardenSetupSna
   };
   localStorage.setItem(previewStorageKey, JSON.stringify(snapshot));
   return snapshot;
+}
+
+export async function loadPlacements(): Promise<CropPlacement[]> {
+  if (isTauri()) return invoke<CropPlacement[]>("load_placements");
+  const stored = localStorage.getItem(previewPlacementsKey);
+  return stored ? (JSON.parse(stored) as CropPlacement[]) : [];
+}
+
+export async function savePlacement(input: CropPlacementInput): Promise<CropPlacement> {
+  if (isTauri()) return invoke<CropPlacement>("save_placement", { input });
+  const placements = await loadPlacements();
+  const placement: CropPlacement = {
+    ...input,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString()
+  };
+  localStorage.setItem(previewPlacementsKey, JSON.stringify([...placements, placement]));
+  return placement;
 }
