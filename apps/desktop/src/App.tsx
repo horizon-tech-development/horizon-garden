@@ -11,6 +11,9 @@ import {
   type LengthUnit
 } from "@horizon-garden/domain";
 import { loadSetup, saveSetup } from "./storage";
+import { loadPlacements } from "./storage";
+import { CatalogPlanner } from "./CatalogPlanner";
+import type { CropPlacement } from "@horizon-garden/domain";
 
 const areaLabels: Record<GrowingAreaType, string> = {
   raised_bed: "Raised bed",
@@ -63,10 +66,12 @@ export function App() {
   const [snapshot, setSnapshot] = useState<GardenSetupSnapshot | null>(null);
   const [message, setMessage] = useState("Loading your local garden…");
   const [busy, setBusy] = useState(true);
+  const [placements, setPlacements] = useState<CropPlacement[]>([]);
 
   useEffect(() => {
-    void loadSetup()
-      .then((stored) => {
+    void Promise.all([loadSetup(), loadPlacements()])
+      .then(([stored, storedPlacements]) => {
+        setPlacements(storedPlacements);
         if (stored) {
           setSnapshot(stored);
           setForm(formFromSnapshot(stored));
@@ -169,12 +174,15 @@ export function App() {
       </section>
 
       {snapshot && (
+        <>
         <section className="saved-card" aria-labelledby="saved-heading">
           <span>{areaLabels[snapshot.growingAreaType]}</span>
           <h2 id="saved-heading">{snapshot.growingAreaName}</h2>
           <p>{snapshot.workspaceName} · {snapshot.propertyName} · {snapshot.gardenName}</p>
           <small>Durable ID: {snapshot.growingAreaId}</small>
         </section>
+        <CatalogPlanner growingAreaId={snapshot.growingAreaId} initialPlacements={placements.filter((placement) => placement.growingAreaId === snapshot.growingAreaId)} />
+        </>
       )}
     </main>
   );
