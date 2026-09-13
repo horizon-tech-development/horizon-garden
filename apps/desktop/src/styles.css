@@ -22,6 +22,19 @@ button, input, select { font: inherit; }
 .plant-card:hover, .plant-card.selected { border-color: #2f6d4f; background: #edf5ea; box-shadow: 0 0 0 2px rgba(47,109,79,.12); }
 .plant-card em { color: #5b755f; font-size: .8rem; }
 .plant-card span, .plant-card small { color: #53675a; line-height: 1.4; }
+.companion-guide { margin-top: 24px; border-radius: 16px; background: #f2f0df; padding: 20px; }
+.companion-guide h3 { margin: 6px 0; }
+.companion-guide > div > p { color: #53675a; }
+.companion-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(210px,1fr)); gap: 12px; margin-top: 16px; }
+.companion-grid article { border: 1px solid #d7dbc8; border-radius: 12px; background: #fffefa; padding: 14px; }
+.companion-grid article > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.companion-grid article p { margin-bottom: 0; color: #435448; line-height: 1.45; }
+.companion-grid article small { color: #657064; text-transform: capitalize; }
+.evidence { border-radius: 999px; padding: 3px 8px; font-size: .7rem; font-weight: 800; text-transform: uppercase; }
+.evidence.supported { background: #dcefd8; color: #245d37; }
+.evidence.mixed { background: #f3e6bd; color: #76591c; }
+.evidence.traditional { background: #e6e8e2; color: #526056; }
+.companion-grid .caution { color: #76591c; font-size: .82rem; }
 .placement-form { margin-top: 26px; border-top: 1px solid #d8e1d3; padding-top: 22px; }
 .placement-form h3, .placement-list h3 { margin-top: 0; }
 .full-width { grid-column: 1 / -1; }

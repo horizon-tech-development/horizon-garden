@@ -3,6 +3,7 @@ import {
   filterPlantCatalog,
   growingEnvironments,
   growingSeasons,
+  recommendCompanions,
   starterPlantCatalog,
   validateCropPlacement,
   type CropPlacement,
@@ -31,6 +32,7 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
     () => filterPlantCatalog(starterPlantCatalog, { query, season, environment }),
     [environment, query, season]
   );
+  const companions = useMemo(() => recommendCompanions(selectedPlantId), [selectedPlantId]);
 
   async function placeCrop(event: FormEvent) {
     event.preventDefault();
@@ -72,6 +74,22 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
           </button>
         ))}
       </div>
+
+      <aside className="companion-guide" aria-labelledby="companion-heading">
+        <div>
+          <span className="step">Nearby planting guidance</span>
+          <h3 id="companion-heading">Companions for {starterPlantCatalog.find((plant) => plant.id === selectedPlantId)?.commonName}</h3>
+          <p>These suggestions support diversity and garden planning; they do not guarantee insect or disease prevention.</p>
+        </div>
+        {companions.length > 0 ? <div className="companion-grid">{companions.map((recommendation) => (
+          <article key={`${recommendation.cropId}-${recommendation.companionId}`}>
+            <div><strong>{recommendation.companion.commonName}</strong><span className={`evidence ${recommendation.evidence}`}>{recommendation.evidence}</span></div>
+            <small>{recommendation.benefit.replaceAll("_", " ")}</small>
+            <p>{recommendation.rationale}</p>
+            {recommendation.caution && <p className="caution">Caution: {recommendation.caution}</p>}
+          </article>
+        ))}</div> : <p>No curated companion guidance is available for this starter crop yet.</p>}
+      </aside>
 
       <form className="placement-form" onSubmit={(event) => void placeCrop(event)}>
         <h3>Place selected crop</h3>

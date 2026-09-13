@@ -1,4 +1,5 @@
 export * from "./catalog.js";
+export * from "./companions.js";
 export * from "./measurements.js";
 export * from "./model.js";
 export * from "./catalog.js";
