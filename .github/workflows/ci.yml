@@ -48,3 +48,15 @@ jobs:
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
       - name: Native lint
         run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
+
+  native-check-macos:
+    runs-on: [self-hosted, macOS, X64, horizon-ci]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Native tests
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: Native lint
+        run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
