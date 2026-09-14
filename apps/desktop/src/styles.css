@@ -47,6 +47,7 @@ button, input, select { font: inherit; }
 .schedule-list { display: grid; gap: 10px; }
 .schedule-list article { display: grid; grid-template-columns: minmax(100px,.7fr) 1fr 1.6fr; gap: 12px; align-items: center; border-radius: 12px; background: #edf5ea; padding: 14px; }
 .schedule-list span { color: #53675a; font-size: .86rem; }
+.care-schedule .schedule-list article { background: #f2f0df; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
 h2 { margin: 6px 0 0; font-size: 1.6rem; }
 .status { max-width: 390px; border-radius: 12px; background: #edf5ea; color: #2f633b; padding: 10px 14px; font-size: .9rem; }

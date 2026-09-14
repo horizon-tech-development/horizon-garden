@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import {
   filterPlantCatalog,
+  buildCareSchedule,
   buildHarvestSchedule,
   growingEnvironments,
   growingSeasons,
@@ -35,6 +36,7 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
   );
   const companions = useMemo(() => recommendCompanions(selectedPlantId), [selectedPlantId]);
   const harvestSchedule = useMemo(() => buildHarvestSchedule(placements), [placements]);
+  const careSchedule = useMemo(() => buildCareSchedule(placements, new Date().toISOString().slice(0, 10), 7), [placements]);
 
   async function placeCrop(event: FormEvent) {
     event.preventDefault();
@@ -115,6 +117,17 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
             <strong>{item.plantName}</strong>
             <span>Planted <time dateTime={item.plantedOn}>{item.plantedOn}</time></span>
             <span>Estimated harvest: <time dateTime={item.earliestHarvestOn}>{item.earliestHarvestOn}</time> – <time dateTime={item.latestHarvestOn}>{item.latestHarvestOn}</time></span>
+          </article>
+        ))}</div>
+      </section>}
+
+      {careSchedule.length > 0 && <section className="schedule care-schedule" aria-labelledby="care-heading">
+        <div><span className="step">Next seven days</span><h3 id="care-heading">Care reminders</h3><p>These are observation prompts, not fixed watering commands. Adjust care for rainfall, soil, containers, and current plant conditions.</p></div>
+        <div className="schedule-list">{careSchedule.map((task) => (
+          <article key={task.id}>
+            <strong>{task.title}</strong>
+            <span>Due <time dateTime={task.dueOn}>{task.dueOn}</time></span>
+            <span>{task.guidance}</span>
           </article>
         ))}</div>
       </section>}
