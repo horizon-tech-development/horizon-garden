@@ -85,6 +85,50 @@ struct CropPlacement {
     created_at: String,
 }
 
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CareResultInput {
+    task_id: String,
+    placement_id: String,
+    kind: String,
+    due_on: String,
+    status: String,
+    notes: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CareResult {
+    id: String,
+    task_id: String,
+    placement_id: String,
+    kind: String,
+    due_on: String,
+    status: String,
+    notes: String,
+    recorded_at: String,
+}
+
+fn validate_care_result(input: &CareResultInput) -> Result<(), AppError> {
+    if input.task_id.trim().is_empty() || input.placement_id.trim().is_empty() {
+        return Err(AppError::Validation("A care task and placement are required.".into()));
+    }
+    if !["moisture-check", "health-check"].contains(&input.kind.as_str()) {
+        return Err(AppError::Validation("Care task kind is invalid.".into()));
+    }
+    if chrono::NaiveDate::parse_from_str(&input.due_on, "%Y-%m-%d").is_err() {
+        return Err(AppError::Validation("Care task date is invalid.".into()));
+    }
+    if !["completed", "skipped"].contains(&input.status.as_str()) {
+        return Err(AppError::Validation("Care result status is invalid.".into()));
+    }
+    if input.notes.chars().count() > 1_000 {
+        return Err(AppError::Validation("Care notes cannot exceed 1,000 characters.".into()));
+    }
+    Ok(())
+}
+
 const STARTER_PLANT_IDS: [&str;  8] = [
     "plant-tomato", "plant-pepper", "plant-lettuce", "plant-carrot",
     "plant-basil", "plant-garlic", "plant-marigold", "plant-chives",
@@ -199,10 +243,22 @@ fn migrate(connection: &Connection) -> Result<(), AppError> {
            notes TEXT NOT NULL DEFAULT '',
            created_at TEXT NOT NULL
          );
+         CREATE TABLE IF NOT EXISTS care_results (
+           id TEXT PRIMARY KEY,
+           task_id TEXT NOT NULL UNIQUE,
+           placement_id TEXT NOT NULL REFERENCES crop_placements(id) ON DELETE CASCADE,
+           kind TEXT NOT NULL CHECK(kind IN ('moisture-check','health-check')),
+           due_on TEXT NOT NULL,
+           status TEXT NOT NULL CHECK(status IN ('completed','skipped')),
+           notes TEXT NOT NULL DEFAULT '',
+           recorded_at TEXT NOT NULL
+         );
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
          VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
-         VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
+         VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+         INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+         VALUES (3, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
     )?;
     Ok(())
 }
@@ -360,6 +416,76 @@ fn save_placement(
     Ok(placement)
 }
 
+
+#[tauri::command]
+fn load_care_results(database: State<'_, Database>) -> Result<Vec<CareResult>, AppError> {
+    let connection = database.0.lock().expect("database lock poisoned");
+    let mut statement = connection.prepare(
+        "SELECT id, task_id, placement_id, kind, due_on, status, notes, recorded_at
+         FROM care_results ORDER BY recorded_at, id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(CareResult {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            placement_id: row.get(2)?,
+            kind: row.get(3)?,
+            due_on: row.get(4)?,
+            status: row.get(5)?,
+            notes: row.get(6)?,
+            recorded_at: row.get(7)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+#[tauri::command]
+fn save_care_result(
+    input: CareResultInput,
+    database: State<'_, Database>,
+) -> Result<CareResult, AppError> {
+    validate_care_result(&input)?;
+    let connection = database.0.lock().expect("database lock poisoned");
+    let existing = connection.query_row(
+        "SELECT id, task_id, placement_id, kind, due_on, status, notes, recorded_at
+         FROM care_results WHERE task_id = ?1",
+        [&input.task_id],
+        |row| Ok(CareResult {
+            id: row.get(0)?, task_id: row.get(1)?, placement_id: row.get(2)?,
+            kind: row.get(3)?, due_on: row.get(4)?, status: row.get(5)?,
+            notes: row.get(6)?, recorded_at: row.get(7)?,
+        }),
+    ).optional()?;
+    if let Some(result) = existing {
+        return Ok(result);
+    }
+    let placement_exists: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM crop_placements WHERE id = ?1)",
+        [&input.placement_id],
+        |row| row.get(0),
+    )?;
+    if !placement_exists {
+        return Err(AppError::Validation("The care task placement does not exist.".into()));
+    }
+    let result = CareResult {
+        id: Uuid::now_v7().to_string(),
+        task_id: input.task_id.trim().to_owned(),
+        placement_id: input.placement_id.trim().to_owned(),
+        kind: input.kind,
+        due_on: input.due_on,
+        status: input.status,
+        notes: input.notes.trim().to_owned(),
+        recorded_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+    };
+    connection.execute(
+        "INSERT INTO care_results(id, task_id, placement_id, kind, due_on, status, notes, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![result.id, result.task_id, result.placement_id, result.kind,
+                result.due_on, result.status, result.notes, result.recorded_at],
+    )?;
+    Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -373,7 +499,9 @@ pub fn run() {
             load_setup,
             save_setup,
             load_placements,
-            save_placement
+            save_placement,
+            load_care_results,
+            save_care_result
         ])
         .run(tauri::generate_context!())
         .expect("error while running Horizon Garden");
@@ -427,7 +555,20 @@ mod tests {
         let version: i64 = connection
             .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| row.get(0))
             .expect("migration version");
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
+    }
+
+    #[test]
+    fn rejects_invalid_care_result_at_native_boundary() {
+        let input = CareResultInput {
+            task_id: "task".into(),
+            placement_id: "placement".into(),
+            kind: "watering-done".into(),
+            due_on: "2026-09-16".into(),
+            status: "completed".into(),
+            notes: String::new(),
+        };
+        assert!(matches!(validate_care_result(&input), Err(AppError::Validation(_))));
     }
 
     #[test]
