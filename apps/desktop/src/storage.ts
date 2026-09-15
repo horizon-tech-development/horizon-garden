@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CropPlacement, CropPlacementInput, GardenSetupInput, GardenSetupSnapshot } from "@horizon-garden/domain";
+import type { CareResult, CareResultInput, CropPlacement, CropPlacementInput, GardenSetupInput, GardenSetupSnapshot } from "@horizon-garden/domain";
 
 const previewStorageKey = "horizon-garden-preview-snapshot";
 const previewPlacementsKey = "horizon-garden-preview-placements";
+const previewCareResultsKey = "horizon-garden-preview-care-results";
 
 function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window;
@@ -48,4 +49,21 @@ export async function savePlacement(input: CropPlacementInput): Promise<CropPlac
   };
   localStorage.setItem(previewPlacementsKey, JSON.stringify([...placements, placement]));
   return placement;
+}
+
+
+export async function loadCareResults(): Promise<CareResult[]> {
+  if (isTauri()) return invoke<CareResult[]>("load_care_results");
+  const stored = localStorage.getItem(previewCareResultsKey);
+  return stored ? (JSON.parse(stored) as CareResult[]) : [];
+}
+
+export async function saveCareResult(input: CareResultInput): Promise<CareResult> {
+  if (isTauri()) return invoke<CareResult>("save_care_result", { input });
+  const results = await loadCareResults();
+  const existing = results.find((result) => result.taskId === input.taskId);
+  if (existing) return existing;
+  const result: CareResult = { ...input, id: crypto.randomUUID(), recordedAt: new Date().toISOString() };
+  localStorage.setItem(previewCareResultsKey, JSON.stringify([...results, result]));
+  return result;
 }
