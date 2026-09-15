@@ -27,8 +27,16 @@ jobs:
     runs-on: [self-hosted, Linux, X64, horizon-ci]
     steps:
       - uses: actions/checkout@v4
-      - name: Install Tauri Linux dependencies
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Verify Tauri Linux dependencies
+        run: |
+          set -e
+
+          dpkg -s libwebkit2gtk-4.1-dev >/dev/null
+          dpkg -s libayatana-appindicator3-dev >/dev/null
+          dpkg -s librsvg2-dev >/dev/null
+          command -v patchelf >/dev/null
+
+          echo "PASS: Tauri Linux dependencies are installed"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
