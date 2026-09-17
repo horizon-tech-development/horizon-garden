@@ -1,10 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CareResult, CareResultInput, CropPlacement, CropPlacementInput, GardenSetupInput, GardenSetupSnapshot, HarvestRecord, HarvestRecordInput } from "@horizon-garden/domain";
+import type { CareResult, CareResultInput, CropPlacement, CropPlacementInput, GardenObservation, GardenObservationInput, GardenSetupInput, GardenSetupSnapshot, HarvestRecord, HarvestRecordInput } from "@horizon-garden/domain";
 
 const previewStorageKey = "horizon-garden-preview-snapshot";
 const previewPlacementsKey = "horizon-garden-preview-placements";
 const previewCareResultsKey = "horizon-garden-preview-care-results";
 const previewHarvestsKey = "horizon-garden-preview-harvests";
+const previewObservationsKey = "horizon-garden-preview-observations";
 
 function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window;
@@ -80,4 +81,18 @@ export async function saveHarvest(input: HarvestRecordInput): Promise<HarvestRec
   const record: HarvestRecord = { ...input, id: crypto.randomUUID(), recordedAt: new Date().toISOString() };
   localStorage.setItem(previewHarvestsKey, JSON.stringify([...records, record]));
   return record;
+}
+
+export async function loadObservations(): Promise<GardenObservation[]> {
+  if (isTauri()) return invoke<GardenObservation[]>("load_observations");
+  const stored = localStorage.getItem(previewObservationsKey);
+  return stored ? (JSON.parse(stored) as GardenObservation[]) : [];
+}
+
+export async function saveObservation(input: GardenObservationInput): Promise<GardenObservation> {
+  if (isTauri()) return invoke<GardenObservation>("save_observation", { input });
+  const observations = await loadObservations();
+  const observation: GardenObservation = { ...input, id: crypto.randomUUID(), recordedAt: new Date().toISOString() };
+  localStorage.setItem(previewObservationsKey, JSON.stringify([...observations, observation]));
+  return observation;
 }

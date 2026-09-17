@@ -12,15 +12,21 @@ import {
   validateCareResult,
   validateHarvestRecord,
   harvestUnits,
+  observationKinds,
+  conditionLevels,
+  validateGardenObservation,
   type CareResult,
   type CareTask,
   type CropPlacement,
   type HarvestRecord,
   type HarvestUnit,
+  type GardenObservation,
+  type ObservationKind,
+  type ConditionLevel,
   type GrowingEnvironment,
   type GrowingSeason
 } from "@horizon-garden/domain";
-import { loadCareResults, loadHarvests, saveCareResult, saveHarvest, savePlacement } from "./storage";
+import { loadCareResults, loadHarvests, loadObservations, saveCareResult, saveHarvest, saveObservation, savePlacement } from "./storage";
 
 interface Props {
   growingAreaId: string;
@@ -43,6 +49,12 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
   const [harvestAmount, setHarvestAmount] = useState("1");
   const [harvestUnit, setHarvestUnit] = useState<HarvestUnit>("count");
   const [harvestNotes, setHarvestNotes] = useState("");
+  const [observations, setObservations] = useState<GardenObservation[]>([]);
+  const [observationPlacementId, setObservationPlacementId] = useState(initialPlacements[0]?.id ?? "");
+  const [observedOn, setObservedOn] = useState(new Date().toISOString().slice(0, 10));
+  const [observationKind, setObservationKind] = useState<ObservationKind>("general");
+  const [condition, setCondition] = useState<ConditionLevel>("normal");
+  const [observationNotes, setObservationNotes] = useState("");
   const [message, setMessage] = useState("Choose a crop from the local starter catalog.");
 
   const plants = useMemo(
@@ -55,9 +67,10 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
   const pendingCareSchedule = useMemo(() => unresolvedCareTasks(careSchedule, careResults), [careSchedule, careResults]);
 
   useEffect(() => {
-    void Promise.all([loadCareResults(), loadHarvests()]).then(([results, records]) => {
+    void Promise.all([loadCareResults(), loadHarvests(), loadObservations()]).then(([results, records, journal]) => {
       setCareResults(results);
       setHarvests(records);
+      setObservations(journal);
     }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)));
   }, []);
 
@@ -79,6 +92,16 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
     } catch (error: unknown) { setMessage(error instanceof Error ? error.message : String(error)); }
   }
 
+  async function recordObservation(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const saved = await saveObservation(validateGardenObservation({ placementId: observationPlacementId, observedOn, kind: observationKind, condition, notes: observationNotes }));
+      setObservations((current) => [...current, saved]);
+      setObservationNotes("");
+      setMessage("Garden observation recorded locally without asserting a diagnosis.");
+    } catch (error: unknown) { setMessage(error instanceof Error ? error.message : String(error)); }
+  }
+
   async function placeCrop(event: FormEvent) {
     event.preventDefault();
     try {
@@ -92,6 +115,7 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
       const saved = await savePlacement(input);
       setPlacements((current) => [...current, saved]);
       setHarvestPlacementId((current) => current || saved.id);
+      setObservationPlacementId((current) => current || saved.id);
       setNotes("");
       setMessage("Crop placement saved locally.");
     } catch (error: unknown) {
@@ -169,6 +193,18 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
           const plant = starterPlantCatalog.find((item) => item.id === placement?.plantId);
           return <article key={record.id}><strong>{plant?.commonName ?? "Crop"} · {record.amount} {record.unit}</strong><span>Harvested <time dateTime={record.harvestedOn}>{record.harvestedOn}</time></span>{record.notes && <span>{record.notes}</span>}</article>;
         })}</div>}
+      </section>}
+
+      {placements.length > 0 && <section className="schedule observation-log" aria-labelledby="observation-heading">
+        <div><span className="step">Garden journal</span><h3 id="observation-heading">Observations</h3><p>Record what you see. Pest and disease entries are observations, not confirmed diagnoses.</p></div>
+        <form className="placement-form" onSubmit={(event) => void recordObservation(event)}><div className="form-grid">
+          <label>Crop<select value={observationPlacementId} onChange={(event) => setObservationPlacementId(event.target.value)} required>{placements.map((placement) => <option key={placement.id} value={placement.id}>{starterPlantCatalog.find((plant) => plant.id === placement.plantId)?.commonName ?? placement.plantId} · {placement.plantedOn}</option>)}</select></label>
+          <label>Observed date<input type="date" value={observedOn} onChange={(event) => setObservedOn(event.target.value)} required /></label>
+          <label>Kind<select value={observationKind} onChange={(event) => setObservationKind(event.target.value as ObservationKind)}>{observationKinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+          <label>Condition<select value={condition} onChange={(event) => setCondition(event.target.value as ConditionLevel)}>{conditionLevels.map((level) => <option key={level} value={level}>{level.replaceAll("-", " ")}</option>)}</select></label>
+          <label className="full-width">Notes<input value={observationNotes} maxLength={2000} onChange={(event) => setObservationNotes(event.target.value)} placeholder="What changed, where it appeared, and how widespread it is" required /></label>
+        </div><button type="submit">Record observation</button></form>
+        {observations.length > 0 && <div className="schedule-list">{[...observations].sort((a, b) => b.observedOn.localeCompare(a.observedOn)).map((entry) => { const placement = placements.find((item) => item.id === entry.placementId); const plant = starterPlantCatalog.find((item) => item.id === placement?.plantId); return <article key={entry.id}><strong>{plant?.commonName ?? "Crop"} · {entry.kind} · {entry.condition.replaceAll("-", " ")}</strong><span>Observed <time dateTime={entry.observedOn}>{entry.observedOn}</time></span><span>{entry.notes}</span></article>; })}</div>}
       </section>}
 
       {harvestSchedule.length > 0 && <section className="schedule" aria-labelledby="schedule-heading">

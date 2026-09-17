@@ -101,6 +101,14 @@ struct HarvestRecordInput { placement_id: String, harvested_on: String, amount: 
 #[serde(rename_all = "camelCase")]
 struct HarvestRecord { id: String, placement_id: String, harvested_on: String, amount: f64, unit: String, notes: String, recorded_at: String }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GardenObservationInput { placement_id: String, observed_on: String, kind: String, condition: String, notes: String }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GardenObservation { id: String, placement_id: String, observed_on: String, kind: String, condition: String, notes: String, recorded_at: String }
+
 fn validate_care_result(input: &CareResultInput) -> Result<(), AppError> {
     if input.task_id.trim().is_empty() || input.placement_id.trim().is_empty() { return Err(AppError::Validation("A care task and placement are required.".into())); }
     if !["moisture-check", "health-check"].contains(&input.kind.as_str()) { return Err(AppError::Validation("Care task kind is invalid.".into())); }
@@ -117,6 +125,17 @@ fn validate_harvest(input: &HarvestRecordInput) -> Result<(), AppError> {
     if input.unit == "count" && input.amount.fract() != 0.0 { return Err(AppError::Validation("Count harvests must use a whole number.".into())); }
     if !["count", "g", "kg", "oz", "lb"].contains(&input.unit.as_str()) { return Err(AppError::Validation("Harvest unit is invalid.".into())); }
     if input.notes.chars().count() > 1_000 { return Err(AppError::Validation("Harvest notes cannot exceed 1,000 characters.".into())); }
+    Ok(())
+}
+
+fn validate_observation(input: &GardenObservationInput) -> Result<(), AppError> {
+    if input.placement_id.trim().is_empty() { return Err(AppError::Validation("A crop placement is required.".into())); }
+    if chrono::NaiveDate::parse_from_str(&input.observed_on, "%Y-%m-%d").is_err() { return Err(AppError::Validation("Observation date is invalid.".into())); }
+    if !["general", "growth", "pest", "disease", "damage", "weather"].contains(&input.kind.as_str()) { return Err(AppError::Validation("Observation kind is invalid.".into())); }
+    if !["normal", "watch", "action-needed"].contains(&input.condition.as_str()) { return Err(AppError::Validation("Condition level is invalid.".into())); }
+    let notes = input.notes.trim();
+    if notes.is_empty() { return Err(AppError::Validation("Observation notes are required.".into())); }
+    if notes.chars().count() > 2_000 { return Err(AppError::Validation("Observation notes cannot exceed 2,000 characters.".into())); }
     Ok(())
 }
 
@@ -248,6 +267,14 @@ fn migrate(connection: &Connection) -> Result<(), AppError> {
            unit TEXT NOT NULL CHECK(unit IN ('count','g','kg','oz','lb')),
            notes TEXT NOT NULL DEFAULT '', recorded_at TEXT NOT NULL
          );
+         CREATE TABLE IF NOT EXISTS garden_observations (
+           id TEXT PRIMARY KEY,
+           placement_id TEXT NOT NULL REFERENCES crop_placements(id) ON DELETE CASCADE,
+           observed_on TEXT NOT NULL,
+           kind TEXT NOT NULL CHECK(kind IN ('general','growth','pest','disease','damage','weather')),
+           condition TEXT NOT NULL CHECK(condition IN ('normal','watch','action-needed')),
+           notes TEXT NOT NULL, recorded_at TEXT NOT NULL
+         );
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
          VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
@@ -255,7 +282,9 @@ fn migrate(connection: &Connection) -> Result<(), AppError> {
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
          VALUES (3, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
-         VALUES (4, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
+         VALUES (4, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+         INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+         VALUES (5, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
     )?;
     Ok(())
 }
@@ -453,6 +482,25 @@ fn save_harvest(input: HarvestRecordInput, database: State<'_, Database>) -> Res
     Ok(result)
 }
 
+#[tauri::command]
+fn load_observations(database: State<'_, Database>) -> Result<Vec<GardenObservation>, AppError> {
+    let connection = database.0.lock().expect("database lock poisoned");
+    let mut statement = connection.prepare("SELECT id,placement_id,observed_on,kind,condition,notes,recorded_at FROM garden_observations ORDER BY observed_on,recorded_at")?;
+    let rows = statement.query_map([], |row| Ok(GardenObservation { id: row.get(0)?, placement_id: row.get(1)?, observed_on: row.get(2)?, kind: row.get(3)?, condition: row.get(4)?, notes: row.get(5)?, recorded_at: row.get(6)? }))?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+#[tauri::command]
+fn save_observation(input: GardenObservationInput, database: State<'_, Database>) -> Result<GardenObservation, AppError> {
+    validate_observation(&input)?;
+    let connection = database.0.lock().expect("database lock poisoned");
+    let exists: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM crop_placements WHERE id=?1)", [&input.placement_id], |row| row.get(0))?;
+    if !exists { return Err(AppError::Validation("The observation crop placement does not exist.".into())); }
+    let result = GardenObservation { id: Uuid::now_v7().to_string(), placement_id: input.placement_id.trim().to_owned(), observed_on: input.observed_on, kind: input.kind, condition: input.condition, notes: input.notes.trim().to_owned(), recorded_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true) };
+    connection.execute("INSERT INTO garden_observations(id,placement_id,observed_on,kind,condition,notes,recorded_at) VALUES (?1,?2,?3,?4,?5,?6,?7)", params![result.id,result.placement_id,result.observed_on,result.kind,result.condition,result.notes,result.recorded_at])?;
+    Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -470,7 +518,9 @@ pub fn run() {
             load_care_results,
             save_care_result,
             load_harvests,
-            save_harvest
+            save_harvest,
+            load_observations,
+            save_observation
         ])
         .run(tauri::generate_context!())
         .expect("error while running Horizon Garden");
@@ -524,7 +574,7 @@ mod tests {
         let version: i64 = connection
             .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| row.get(0))
             .expect("migration version");
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 
     #[test]
@@ -559,5 +609,11 @@ mod tests {
     fn rejects_fractional_count_harvest_at_native_boundary() {
         let input = HarvestRecordInput { placement_id: "placement".into(), harvested_on: "2026-09-17".into(), amount: 1.5, unit: "count".into(), notes: String::new() };
         assert!(matches!(validate_harvest(&input), Err(AppError::Validation(_))));
+    }
+
+    #[test]
+    fn rejects_empty_observation_at_native_boundary() {
+        let input = GardenObservationInput { placement_id: "placement".into(), observed_on: "2026-09-17".into(), kind: "pest".into(), condition: "watch".into(), notes: " ".into() };
+        assert!(matches!(validate_observation(&input), Err(AppError::Validation(_))));
     }
 }
