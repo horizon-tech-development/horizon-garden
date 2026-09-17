@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   filterPlantCatalog,
   buildCareSchedule,
@@ -8,11 +8,15 @@ import {
   recommendCompanions,
   starterPlantCatalog,
   validateCropPlacement,
+  unresolvedCareTasks,
+  validateCareResult,
+  type CareResult,
+  type CareTask,
   type CropPlacement,
   type GrowingEnvironment,
   type GrowingSeason
 } from "@horizon-garden/domain";
-import { savePlacement } from "./storage";
+import { loadCareResults, saveCareResult, savePlacement } from "./storage";
 
 interface Props {
   growingAreaId: string;
@@ -28,6 +32,7 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
   const [plantedOn, setPlantedOn] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
   const [placements, setPlacements] = useState(initialPlacements);
+  const [careResults, setCareResults] = useState<CareResult[]>([]);
   const [message, setMessage] = useState("Choose a crop from the local starter catalog.");
 
   const plants = useMemo(
@@ -37,6 +42,22 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
   const companions = useMemo(() => recommendCompanions(selectedPlantId), [selectedPlantId]);
   const harvestSchedule = useMemo(() => buildHarvestSchedule(placements), [placements]);
   const careSchedule = useMemo(() => buildCareSchedule(placements, new Date().toISOString().slice(0, 10), 7), [placements]);
+  const pendingCareSchedule = useMemo(() => unresolvedCareTasks(careSchedule, careResults), [careSchedule, careResults]);
+
+  useEffect(() => {
+    void loadCareResults().then(setCareResults).catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)));
+  }, []);
+
+  async function recordCareResult(task: CareTask, status: "completed" | "skipped") {
+    try {
+      const input = validateCareResult({ taskId: task.id, placementId: task.placementId, kind: task.kind, dueOn: task.dueOn, status, notes: "" });
+      const saved = await saveCareResult(input);
+      setCareResults((current) => current.some((result) => result.id === saved.id) ? current : [...current, saved]);
+      setMessage(status === "completed" ? "Care observation recorded." : "Care reminder skipped and retained in history.");
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   async function placeCrop(event: FormEvent) {
     event.preventDefault();
@@ -121,14 +142,22 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
         ))}</div>
       </section>}
 
-      {careSchedule.length > 0 && <section className="schedule care-schedule" aria-labelledby="care-heading">
+      {pendingCareSchedule.length > 0 && <section className="schedule care-schedule" aria-labelledby="care-heading">
         <div><span className="step">Next seven days</span><h3 id="care-heading">Care reminders</h3><p>These are observation prompts, not fixed watering commands. Adjust care for rainfall, soil, containers, and current plant conditions.</p></div>
-        <div className="schedule-list">{careSchedule.map((task) => (
+        <div className="schedule-list">{pendingCareSchedule.map((task) => (
           <article key={task.id}>
             <strong>{task.title}</strong>
             <span>Due <time dateTime={task.dueOn}>{task.dueOn}</time></span>
             <span>{task.guidance}</span>
+            <div className="care-actions"><button type="button" onClick={() => void recordCareResult(task, "completed")}>Record checked</button><button type="button" className="secondary" onClick={() => void recordCareResult(task, "skipped")}>Skip</button></div>
           </article>
+        ))}</div>
+      </section>}
+
+      {careResults.length > 0 && <section className="schedule care-history" aria-labelledby="care-history-heading">
+        <div><span className="step">Local record</span><h3 id="care-history-heading">Care history</h3><p>Completed and skipped observations remain visible without claiming that watering or treatment occurred.</p></div>
+        <div className="schedule-list">{[...careResults].reverse().map((result) => (
+          <article key={result.id}><strong>{result.kind === "moisture-check" ? "Moisture check" : "Plant health check"} · {result.status}</strong><span>Due {result.dueOn} · recorded <time dateTime={result.recordedAt}>{result.recordedAt.slice(0, 10)}</time></span>{result.notes && <span>{result.notes}</span>}</article>
         ))}</div>
       </section>}
     </section>
