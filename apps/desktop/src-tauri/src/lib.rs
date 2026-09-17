@@ -528,6 +528,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_care_result_at_native_boundary() {
+        let input = CareResultInput {
+            task_id: "task".into(),
+            placement_id: "placement".into(),
+            kind: "watering-done".into(),
+            due_on: "2026-09-16".into(),
+            status: "completed".into(),
+            notes: String::new(),
+        };
+        assert!(matches!(
+            validate_care_result(&input),
+            Err(AppError::Validation(_))
+        ));
+    }
+
+    #[test]
     fn rejects_unknown_plant_at_native_boundary() {
         let input = CropPlacementInput {
             growing_area_id: "area".into(),
