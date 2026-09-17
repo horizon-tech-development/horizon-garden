@@ -5,5 +5,6 @@ export * from "./companions.js";
 export * from "./harvests.js";
 export * from "./measurements.js";
 export * from "./model.js";
+export * from "./observations.js";
 export * from "./schedules.js";
 export * from "./uuid-v7.js";
