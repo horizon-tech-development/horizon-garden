@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CareResult, CareResultInput, CropPlacement, CropPlacementInput, GardenSetupInput, GardenSetupSnapshot } from "@horizon-garden/domain";
+import type { CareResult, CareResultInput, CropPlacement, CropPlacementInput, GardenSetupInput, GardenSetupSnapshot, HarvestRecord, HarvestRecordInput } from "@horizon-garden/domain";
 
 const previewStorageKey = "horizon-garden-preview-snapshot";
 const previewPlacementsKey = "horizon-garden-preview-placements";
 const previewCareResultsKey = "horizon-garden-preview-care-results";
+const previewHarvestsKey = "horizon-garden-preview-harvests";
 
 function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window;
@@ -51,7 +52,6 @@ export async function savePlacement(input: CropPlacementInput): Promise<CropPlac
   return placement;
 }
 
-
 export async function loadCareResults(): Promise<CareResult[]> {
   if (isTauri()) return invoke<CareResult[]>("load_care_results");
   const stored = localStorage.getItem(previewCareResultsKey);
@@ -66,4 +66,18 @@ export async function saveCareResult(input: CareResultInput): Promise<CareResult
   const result: CareResult = { ...input, id: crypto.randomUUID(), recordedAt: new Date().toISOString() };
   localStorage.setItem(previewCareResultsKey, JSON.stringify([...results, result]));
   return result;
+}
+
+export async function loadHarvests(): Promise<HarvestRecord[]> {
+  if (isTauri()) return invoke<HarvestRecord[]>("load_harvests");
+  const stored = localStorage.getItem(previewHarvestsKey);
+  return stored ? (JSON.parse(stored) as HarvestRecord[]) : [];
+}
+
+export async function saveHarvest(input: HarvestRecordInput): Promise<HarvestRecord> {
+  if (isTauri()) return invoke<HarvestRecord>("save_harvest", { input });
+  const records = await loadHarvests();
+  const record: HarvestRecord = { ...input, id: crypto.randomUUID(), recordedAt: new Date().toISOString() };
+  localStorage.setItem(previewHarvestsKey, JSON.stringify([...records, record]));
+  return record;
 }

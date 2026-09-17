@@ -10,13 +10,17 @@ import {
   validateCropPlacement,
   unresolvedCareTasks,
   validateCareResult,
+  validateHarvestRecord,
+  harvestUnits,
   type CareResult,
   type CareTask,
   type CropPlacement,
+  type HarvestRecord,
+  type HarvestUnit,
   type GrowingEnvironment,
   type GrowingSeason
 } from "@horizon-garden/domain";
-import { loadCareResults, saveCareResult, savePlacement } from "./storage";
+import { loadCareResults, loadHarvests, saveCareResult, saveHarvest, savePlacement } from "./storage";
 
 interface Props {
   growingAreaId: string;
@@ -33,6 +37,12 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
   const [notes, setNotes] = useState("");
   const [placements, setPlacements] = useState(initialPlacements);
   const [careResults, setCareResults] = useState<CareResult[]>([]);
+  const [harvests, setHarvests] = useState<HarvestRecord[]>([]);
+  const [harvestPlacementId, setHarvestPlacementId] = useState(initialPlacements[0]?.id ?? "");
+  const [harvestedOn, setHarvestedOn] = useState(new Date().toISOString().slice(0, 10));
+  const [harvestAmount, setHarvestAmount] = useState("1");
+  const [harvestUnit, setHarvestUnit] = useState<HarvestUnit>("count");
+  const [harvestNotes, setHarvestNotes] = useState("");
   const [message, setMessage] = useState("Choose a crop from the local starter catalog.");
 
   const plants = useMemo(
@@ -45,18 +55,28 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
   const pendingCareSchedule = useMemo(() => unresolvedCareTasks(careSchedule, careResults), [careSchedule, careResults]);
 
   useEffect(() => {
-    void loadCareResults().then(setCareResults).catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)));
+    void Promise.all([loadCareResults(), loadHarvests()]).then(([results, records]) => {
+      setCareResults(results);
+      setHarvests(records);
+    }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)));
   }, []);
 
   async function recordCareResult(task: CareTask, status: "completed" | "skipped") {
     try {
-      const input = validateCareResult({ taskId: task.id, placementId: task.placementId, kind: task.kind, dueOn: task.dueOn, status, notes: "" });
-      const saved = await saveCareResult(input);
+      const saved = await saveCareResult(validateCareResult({ taskId: task.id, placementId: task.placementId, kind: task.kind, dueOn: task.dueOn, status, notes: "" }));
       setCareResults((current) => current.some((result) => result.id === saved.id) ? current : [...current, saved]);
       setMessage(status === "completed" ? "Care observation recorded." : "Care reminder skipped and retained in history.");
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    }
+    } catch (error: unknown) { setMessage(error instanceof Error ? error.message : String(error)); }
+  }
+
+  async function recordHarvest(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const saved = await saveHarvest(validateHarvestRecord({ placementId: harvestPlacementId, harvestedOn, amount: Number(harvestAmount), unit: harvestUnit, notes: harvestNotes }));
+      setHarvests((current) => [...current, saved]);
+      setHarvestNotes("");
+      setMessage("Harvest recorded locally. The crop remains active for future harvests.");
+    } catch (error: unknown) { setMessage(error instanceof Error ? error.message : String(error)); }
   }
 
   async function placeCrop(event: FormEvent) {
@@ -71,6 +91,7 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
       });
       const saved = await savePlacement(input);
       setPlacements((current) => [...current, saved]);
+      setHarvestPlacementId((current) => current || saved.id);
       setNotes("");
       setMessage("Crop placement saved locally.");
     } catch (error: unknown) {
@@ -131,6 +152,25 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
         return <div key={placement.id}><strong>{plant?.commonName ?? placement.plantId}</strong><span>{placement.quantity} planted · {placement.plantedOn}</span>{placement.notes && <small>{placement.notes}</small>}</div>;
       })}</div>}
 
+      {placements.length > 0 && <section className="schedule harvest-log" aria-labelledby="harvest-log-heading">
+        <div><span className="step">Actual results</span><h3 id="harvest-log-heading">Harvest log</h3><p>Record each picking separately. A harvest does not automatically close the crop placement.</p></div>
+        <form className="placement-form" onSubmit={(event) => void recordHarvest(event)}>
+          <div className="form-grid">
+            <label>Crop<select value={harvestPlacementId} onChange={(event) => setHarvestPlacementId(event.target.value)} required>{placements.map((placement) => <option key={placement.id} value={placement.id}>{starterPlantCatalog.find((plant) => plant.id === placement.plantId)?.commonName ?? placement.plantId} · {placement.plantedOn}</option>)}</select></label>
+            <label>Harvest date<input type="date" value={harvestedOn} onChange={(event) => setHarvestedOn(event.target.value)} required /></label>
+            <label>Amount<input type="number" min="0.001" max="1000000" step={harvestUnit === "count" ? "1" : "0.001"} value={harvestAmount} onChange={(event) => setHarvestAmount(event.target.value)} required /></label>
+            <label>Unit<select value={harvestUnit} onChange={(event) => setHarvestUnit(event.target.value as HarvestUnit)}>{harvestUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>
+            <label className="full-width">Notes<input value={harvestNotes} maxLength={1000} onChange={(event) => setHarvestNotes(event.target.value)} placeholder="Quality, variety, destination, or preservation notes" /></label>
+          </div>
+          <button type="submit">Record harvest</button>
+        </form>
+        {harvests.length > 0 && <div className="schedule-list">{[...harvests].sort((a, b) => b.harvestedOn.localeCompare(a.harvestedOn)).map((record) => {
+          const placement = placements.find((item) => item.id === record.placementId);
+          const plant = starterPlantCatalog.find((item) => item.id === placement?.plantId);
+          return <article key={record.id}><strong>{plant?.commonName ?? "Crop"} · {record.amount} {record.unit}</strong><span>Harvested <time dateTime={record.harvestedOn}>{record.harvestedOn}</time></span>{record.notes && <span>{record.notes}</span>}</article>;
+        })}</div>}
+      </section>}
+
       {harvestSchedule.length > 0 && <section className="schedule" aria-labelledby="schedule-heading">
         <div><span className="step">Estimated timeline</span><h3 id="schedule-heading">Harvest schedule</h3><p>Actual harvest timing varies with variety, weather, and growing conditions.</p></div>
         <div className="schedule-list">{harvestSchedule.map((item) => (
@@ -154,12 +194,7 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
         ))}</div>
       </section>}
 
-      {careResults.length > 0 && <section className="schedule care-history" aria-labelledby="care-history-heading">
-        <div><span className="step">Local record</span><h3 id="care-history-heading">Care history</h3><p>Completed and skipped observations remain visible without claiming that watering or treatment occurred.</p></div>
-        <div className="schedule-list">{[...careResults].reverse().map((result) => (
-          <article key={result.id}><strong>{result.kind === "moisture-check" ? "Moisture check" : "Plant health check"} · {result.status}</strong><span>Due {result.dueOn} · recorded <time dateTime={result.recordedAt}>{result.recordedAt.slice(0, 10)}</time></span>{result.notes && <span>{result.notes}</span>}</article>
-        ))}</div>
-      </section>}
+      {careResults.length > 0 && <section className="schedule care-history" aria-labelledby="care-history-heading"><div><span className="step">Local record</span><h3 id="care-history-heading">Care history</h3><p>Completed and skipped observations remain visible without claiming that watering or treatment occurred.</p></div><div className="schedule-list">{[...careResults].reverse().map((result) => <article key={result.id}><strong>{result.kind === "moisture-check" ? "Moisture check" : "Plant health check"} · {result.status}</strong><span>Due {result.dueOn} · recorded <time dateTime={result.recordedAt}>{result.recordedAt.slice(0, 10)}</time></span>{result.notes && <span>{result.notes}</span>}</article>)}</div></section>}
     </section>
   );
 }
