@@ -10,7 +10,7 @@ import {
   type GrowingAreaType,
   type LengthUnit
 } from "@horizon-garden/domain";
-import { loadSetup, saveSetup } from "./storage";
+import { exportBackup, loadSetup, saveSetup } from "./storage";
 import { loadPlacements } from "./storage";
 import { CatalogPlanner } from "./CatalogPlanner";
 import type { CropPlacement } from "@horizon-garden/domain";
@@ -126,6 +126,18 @@ export function App() {
     }
   }
 
+  async function backup() {
+    setBusy(true);
+    try {
+      const destination = await exportBackup();
+      setMessage(`Backup created: ${destination}`);
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="shell">
       <header className="hero">
@@ -180,6 +192,7 @@ export function App() {
           <h2 id="saved-heading">{snapshot.growingAreaName}</h2>
           <p>{snapshot.workspaceName} · {snapshot.propertyName} · {snapshot.gardenName}</p>
           <small>Durable ID: {snapshot.growingAreaId}</small>
+          <button type="button" className="secondary" disabled={busy} onClick={() => void backup()}>Export JSON backup</button>
         </section>
         <CatalogPlanner growingAreaId={snapshot.growingAreaId} initialPlacements={placements.filter((placement) => placement.growingAreaId === snapshot.growingAreaId)} />
         </>
