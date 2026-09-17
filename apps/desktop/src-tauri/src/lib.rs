@@ -501,11 +501,8 @@ fn save_observation(input: GardenObservationInput, database: State<'_, Database>
     Ok(result)
 }
 
-#[tauri::command]
-fn export_backup(app: tauri::AppHandle, database: State<'_, Database>) -> Result<String, AppError> {
-    let connection = database.0.lock().expect("database lock poisoned");
-    let exported_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-    let json: String = connection.query_row(
+fn build_backup_json(connection: &Connection, exported_at: &str) -> Result<String, AppError> {
+    connection.query_row(
         "SELECT json_object(
           'format','horizon-garden-backup','formatVersion',1,'exportedAt',?1,
           'setup',json(COALESCE((SELECT json_object(
@@ -519,9 +516,16 @@ fn export_backup(app: tauri::AppHandle, database: State<'_, Database>) -> Result
           'harvests',json(COALESCE((SELECT json_group_array(json_object('id',id,'placementId',placement_id,'harvestedOn',harvested_on,'amount',amount,'unit',unit,'notes',notes,'recordedAt',recorded_at)) FROM harvest_records),'[]')),
           'observations',json(COALESCE((SELECT json_group_array(json_object('id',id,'placementId',placement_id,'observedOn',observed_on,'kind',kind,'condition',condition,'notes',notes,'recordedAt',recorded_at)) FROM garden_observations),'[]'))
         )",
-        [&exported_at],
+        [exported_at],
         |row| row.get(0),
-    )?;
+    ).map_err(AppError::from)
+}
+
+#[tauri::command]
+fn export_backup(app: tauri::AppHandle, database: State<'_, Database>) -> Result<String, AppError> {
+    let connection = database.0.lock().expect("database lock poisoned");
+    let exported_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let json = build_backup_json(&connection, &exported_at)?;
     let directory = app.path().app_data_dir().map_err(|_| AppError::MissingDataDirectory)?.join("exports");
     fs::create_dir_all(&directory)?;
     let filename = format!("horizon-garden-backup-{}.json", Utc::now().format("%Y%m%d-%H%M%S"));
@@ -605,6 +609,39 @@ mod tests {
             .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| row.get(0))
             .expect("migration version");
         assert_eq!(version, 5);
+    }
+
+    #[test]
+    fn empty_backup_is_valid_and_versioned_json() {
+        let connection = Connection::open_in_memory().expect("in-memory database");
+        migrate(&connection).expect("migration");
+        let json = build_backup_json(&connection, "2026-09-18T00:00:00.000Z").expect("backup");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(value["format"], "horizon-garden-backup");
+        assert_eq!(value["formatVersion"], 1);
+        assert!(value["setup"].is_null());
+        for key in ["placements", "careResults", "harvests", "observations"] {
+            assert_eq!(value[key].as_array().map(Vec::len), Some(0), "{key}");
+        }
+    }
+
+    #[test]
+    fn populated_backup_preserves_relationship_ids() {
+        let mut connection = Connection::open_in_memory().expect("in-memory database");
+        migrate(&connection).expect("migration");
+        let transaction = connection.transaction().expect("transaction");
+        transaction.execute("INSERT INTO workspaces VALUES ('w','Workspace','t','t')", []).expect("workspace");
+        transaction.execute("INSERT INTO properties VALUES ('p','w','Property','t','t')", []).expect("property");
+        transaction.execute("INSERT INTO gardens VALUES ('g','p','Garden','t','t')", []).expect("garden");
+        transaction.execute("INSERT INTO growing_areas VALUES ('a','g','Bed','raised_bed','rectangle','ft',1000,1000,300,'t','t')", []).expect("area");
+        transaction.execute("INSERT INTO crop_placements VALUES ('c','a','plant-tomato',1,'2026-05-01','','t')", []).expect("placement");
+        transaction.execute("INSERT INTO harvest_records VALUES ('h','c','2026-08-01',2.5,'lb','ripe','t')", []).expect("harvest");
+        transaction.commit().expect("commit");
+        let json = build_backup_json(&connection, "2026-09-18T00:00:00.000Z").expect("backup");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(value["setup"]["growingAreaId"], "a");
+        assert_eq!(value["placements"][0]["id"], "c");
+        assert_eq!(value["harvests"][0]["placementId"], "c");
     }
 
     #[test]
