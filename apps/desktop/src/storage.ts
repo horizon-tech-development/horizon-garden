@@ -96,3 +96,25 @@ export async function saveObservation(input: GardenObservationInput): Promise<Ga
   localStorage.setItem(previewObservationsKey, JSON.stringify([...observations, observation]));
   return observation;
 }
+
+export async function exportBackup(): Promise<string> {
+  if (isTauri()) return invoke<string>("export_backup");
+  const payload = {
+    format: "horizon-garden-backup",
+    formatVersion: 1,
+    exportedAt: new Date().toISOString(),
+    setup: await loadSetup(),
+    placements: await loadPlacements(),
+    careResults: await loadCareResults(),
+    harvests: await loadHarvests(),
+    observations: await loadObservations()
+  };
+  const filename = `horizon-garden-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  return filename;
+}

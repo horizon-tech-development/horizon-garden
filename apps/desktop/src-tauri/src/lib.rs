@@ -501,6 +501,35 @@ fn save_observation(input: GardenObservationInput, database: State<'_, Database>
     Ok(result)
 }
 
+#[tauri::command]
+fn export_backup(app: tauri::AppHandle, database: State<'_, Database>) -> Result<String, AppError> {
+    let connection = database.0.lock().expect("database lock poisoned");
+    let exported_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let json: String = connection.query_row(
+        "SELECT json_object(
+          'format','horizon-garden-backup','formatVersion',1,'exportedAt',?1,
+          'setup',json(COALESCE((SELECT json_object(
+            'workspaceId',w.id,'propertyId',p.id,'gardenId',g.id,'growingAreaId',a.id,
+            'workspaceName',w.name,'propertyName',p.name,'gardenName',g.name,'growingAreaName',a.name,
+            'growingAreaType',a.area_type,'displayUnit',a.display_unit,'lengthMillimeters',a.length_mm,
+            'widthMillimeters',a.width_mm,'depthMillimeters',a.depth_mm,'createdAt',a.created_at,'updatedAt',a.updated_at
+          ) FROM growing_areas a JOIN gardens g ON g.id=a.garden_id JOIN properties p ON p.id=g.property_id JOIN workspaces w ON w.id=p.workspace_id LIMIT 1),'null')),
+          'placements',json(COALESCE((SELECT json_group_array(json_object('id',id,'growingAreaId',growing_area_id,'plantId',plant_id,'quantity',quantity,'plantedOn',planted_on,'notes',notes,'createdAt',created_at)) FROM crop_placements),'[]')),
+          'careResults',json(COALESCE((SELECT json_group_array(json_object('id',id,'taskId',task_id,'placementId',placement_id,'kind',kind,'dueOn',due_on,'status',status,'notes',notes,'recordedAt',recorded_at)) FROM care_results),'[]')),
+          'harvests',json(COALESCE((SELECT json_group_array(json_object('id',id,'placementId',placement_id,'harvestedOn',harvested_on,'amount',amount,'unit',unit,'notes',notes,'recordedAt',recorded_at)) FROM harvest_records),'[]')),
+          'observations',json(COALESCE((SELECT json_group_array(json_object('id',id,'placementId',placement_id,'observedOn',observed_on,'kind',kind,'condition',condition,'notes',notes,'recordedAt',recorded_at)) FROM garden_observations),'[]'))
+        )",
+        [&exported_at],
+        |row| row.get(0),
+    )?;
+    let directory = app.path().app_data_dir().map_err(|_| AppError::MissingDataDirectory)?.join("exports");
+    fs::create_dir_all(&directory)?;
+    let filename = format!("horizon-garden-backup-{}.json", Utc::now().format("%Y%m%d-%H%M%S"));
+    let path = directory.join(filename);
+    fs::write(&path, json)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -520,7 +549,8 @@ pub fn run() {
             load_harvests,
             save_harvest,
             load_observations,
-            save_observation
+            save_observation,
+            export_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running Horizon Garden");
