@@ -15,6 +15,11 @@ import {
   observationKinds,
   conditionLevels,
   validateGardenObservation,
+  activePlacementsOn,
+  placementEndEvent,
+  placementIsActiveOn,
+  placementEndReasons,
+  validatePlacementLifecycleEvent,
   type CareResult,
   type CareTask,
   type CropPlacement,
@@ -23,10 +28,12 @@ import {
   type GardenObservation,
   type ObservationKind,
   type ConditionLevel,
+  type PlacementEndReason,
+  type PlacementLifecycleEvent,
   type GrowingEnvironment,
   type GrowingSeason
 } from "@horizon-garden/domain";
-import { loadCareResults, loadHarvests, loadObservations, saveCareResult, saveHarvest, saveObservation, savePlacement } from "./storage";
+import { endPlacement, loadCareResults, loadHarvests, loadObservations, loadPlacementLifecycle, saveCareResult, saveHarvest, saveObservation, savePlacement } from "./storage";
 
 interface Props {
   growingAreaId: string;
@@ -50,6 +57,11 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
   const [harvestUnit, setHarvestUnit] = useState<HarvestUnit>("count");
   const [harvestNotes, setHarvestNotes] = useState("");
   const [observations, setObservations] = useState<GardenObservation[]>([]);
+  const [lifecycle, setLifecycle] = useState<PlacementLifecycleEvent[]>([]);
+  const [endingPlacementId, setEndingPlacementId] = useState("");
+  const [endedOn, setEndedOn] = useState(new Date().toISOString().slice(0, 10));
+  const [endReason, setEndReason] = useState<PlacementEndReason>("harvest-complete");
+  const [endNotes, setEndNotes] = useState("");
   const [observationPlacementId, setObservationPlacementId] = useState(initialPlacements[0]?.id ?? "");
   const [observedOn, setObservedOn] = useState(new Date().toISOString().slice(0, 10));
   const [observationKind, setObservationKind] = useState<ObservationKind>("general");
@@ -62,17 +74,31 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
     [environment, query, season]
   );
   const companions = useMemo(() => recommendCompanions(selectedPlantId), [selectedPlantId]);
-  const harvestSchedule = useMemo(() => buildHarvestSchedule(placements), [placements]);
-  const careSchedule = useMemo(() => buildCareSchedule(placements, new Date().toISOString().slice(0, 10), 7), [placements]);
+  const today = new Date().toISOString().slice(0, 10);
+  const activePlacements = useMemo(() => activePlacementsOn(placements, lifecycle, today), [lifecycle, placements, today]);
+  const harvestSchedule = useMemo(() => buildHarvestSchedule(activePlacements), [activePlacements]);
+  const careSchedule = useMemo(() => buildCareSchedule(activePlacements, today, 7).filter((task) => placementIsActiveOn(task.placementId, lifecycle, task.dueOn)), [activePlacements, lifecycle, today]);
   const pendingCareSchedule = useMemo(() => unresolvedCareTasks(careSchedule, careResults), [careSchedule, careResults]);
 
   useEffect(() => {
-    void Promise.all([loadCareResults(), loadHarvests(), loadObservations()]).then(([results, records, journal]) => {
+    void Promise.all([loadCareResults(), loadHarvests(), loadObservations(), loadPlacementLifecycle()]).then(([results, records, journal, lifecycleEvents]) => {
       setCareResults(results);
       setHarvests(records);
       setObservations(journal);
+      setLifecycle(lifecycleEvents);
     }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : String(error)));
   }, []);
+
+  async function closePlacement(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const saved = await endPlacement(validatePlacementLifecycleEvent({ placementId: endingPlacementId, endedOn, reason: endReason, notes: endNotes }));
+      setLifecycle((current) => current.some((item) => item.placementId === saved.placementId) ? current : [...current, saved]);
+      setEndNotes("");
+      setEndingPlacementId("");
+      setMessage("Crop placement ended. Its history is preserved and future reminders are suppressed.");
+    } catch (error: unknown) { setMessage(error instanceof Error ? error.message : String(error)); }
+  }
 
   async function recordCareResult(task: CareTask, status: "completed" | "skipped") {
     try {
@@ -173,8 +199,19 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
 
       {placements.length > 0 && <div className="placement-list"><h3>Placed crops</h3>{placements.map((placement) => {
         const plant = starterPlantCatalog.find((entry) => entry.id === placement.plantId);
-        return <div key={placement.id}><strong>{plant?.commonName ?? placement.plantId}</strong><span>{placement.quantity} planted · {placement.plantedOn}</span>{placement.notes && <small>{placement.notes}</small>}</div>;
+        const ended = placementEndEvent(placement.id, lifecycle);
+        return <div key={placement.id}><strong>{plant?.commonName ?? placement.plantId}</strong><span>{placement.quantity} planted · {placement.plantedOn}{ended ? ` · ended ${ended.endedOn} (${ended.reason.replaceAll("-", " ")})` : " · active"}</span>{placement.notes && <small>{placement.notes}</small>}{!ended && <button type="button" className="secondary" onClick={() => setEndingPlacementId(placement.id)}>End placement</button>}</div>;
       })}</div>}
+
+      {endingPlacementId && <form className="placement-form" onSubmit={(event) => void closePlacement(event)}>
+        <h3>End crop placement</h3><p>This preserves all crop, harvest, care, and observation history.</p>
+        <div className="form-grid">
+          <label>End date<input type="date" value={endedOn} onChange={(event) => setEndedOn(event.target.value)} required /></label>
+          <label>Reason<select value={endReason} onChange={(event) => setEndReason(event.target.value as PlacementEndReason)}>{placementEndReasons.map((reason) => <option key={reason} value={reason}>{reason.replaceAll("-", " ")}</option>)}</select></label>
+          <label className="full-width">Notes<input value={endNotes} maxLength={1000} onChange={(event) => setEndNotes(event.target.value)} placeholder="Optional season or outcome notes" /></label>
+        </div>
+        <div className="care-actions"><button type="submit">Confirm end</button><button type="button" className="secondary" onClick={() => setEndingPlacementId("")}>Cancel</button></div>
+      </form>}
 
       {placements.length > 0 && <section className="schedule harvest-log" aria-labelledby="harvest-log-heading">
         <div><span className="step">Actual results</span><h3 id="harvest-log-heading">Harvest log</h3><p>Record each picking separately. A harvest does not automatically close the crop placement.</p></div>

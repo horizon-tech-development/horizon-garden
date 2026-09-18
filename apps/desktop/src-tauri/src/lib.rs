@@ -109,6 +109,22 @@ struct GardenObservationInput { placement_id: String, observed_on: String, kind:
 #[serde(rename_all = "camelCase")]
 struct GardenObservation { id: String, placement_id: String, observed_on: String, kind: String, condition: String, notes: String, recorded_at: String }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlacementLifecycleEventInput { placement_id: String, ended_on: String, reason: String, notes: String }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlacementLifecycleEvent { id: String, placement_id: String, ended_on: String, reason: String, notes: String, recorded_at: String }
+
+fn validate_lifecycle_event(input: &PlacementLifecycleEventInput) -> Result<(), AppError> {
+    if input.placement_id.trim().is_empty() { return Err(AppError::Validation("A crop placement is required.".into())); }
+    if chrono::NaiveDate::parse_from_str(&input.ended_on, "%Y-%m-%d").is_err() { return Err(AppError::Validation("End date is invalid.".into())); }
+    if !["harvest-complete", "crop-failed", "removed", "season-ended"].contains(&input.reason.as_str()) { return Err(AppError::Validation("Placement end reason is invalid.".into())); }
+    if input.notes.chars().count() > 1_000 { return Err(AppError::Validation("Lifecycle notes cannot exceed 1,000 characters.".into())); }
+    Ok(())
+}
+
 fn validate_care_result(input: &CareResultInput) -> Result<(), AppError> {
     if input.task_id.trim().is_empty() || input.placement_id.trim().is_empty() { return Err(AppError::Validation("A care task and placement are required.".into())); }
     if !["moisture-check", "health-check"].contains(&input.kind.as_str()) { return Err(AppError::Validation("Care task kind is invalid.".into())); }
@@ -275,6 +291,13 @@ fn migrate(connection: &Connection) -> Result<(), AppError> {
            condition TEXT NOT NULL CHECK(condition IN ('normal','watch','action-needed')),
            notes TEXT NOT NULL, recorded_at TEXT NOT NULL
          );
+         CREATE TABLE IF NOT EXISTS placement_lifecycle (
+           id TEXT PRIMARY KEY,
+           placement_id TEXT NOT NULL UNIQUE REFERENCES crop_placements(id) ON DELETE CASCADE,
+           ended_on TEXT NOT NULL,
+           reason TEXT NOT NULL CHECK(reason IN ('harvest-complete','crop-failed','removed','season-ended')),
+           notes TEXT NOT NULL DEFAULT '', recorded_at TEXT NOT NULL
+         );
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
          VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
@@ -284,7 +307,9 @@ fn migrate(connection: &Connection) -> Result<(), AppError> {
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
          VALUES (4, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
          INSERT OR IGNORE INTO schema_migrations(version, applied_at)
-         VALUES (5, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
+         VALUES (5, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+         INSERT OR IGNORE INTO schema_migrations(version, applied_at)
+         VALUES (6, strftime('%Y-%m-%dT%H:%M:%fZ','now'));",
     )?;
     Ok(())
 }
@@ -501,6 +526,28 @@ fn save_observation(input: GardenObservationInput, database: State<'_, Database>
     Ok(result)
 }
 
+#[tauri::command]
+fn load_placement_lifecycle(database: State<'_, Database>) -> Result<Vec<PlacementLifecycleEvent>, AppError> {
+    let connection = database.0.lock().expect("database lock poisoned");
+    let mut statement = connection.prepare("SELECT id,placement_id,ended_on,reason,notes,recorded_at FROM placement_lifecycle ORDER BY ended_on,recorded_at")?;
+    let rows = statement.query_map([], |row| Ok(PlacementLifecycleEvent { id: row.get(0)?, placement_id: row.get(1)?, ended_on: row.get(2)?, reason: row.get(3)?, notes: row.get(4)?, recorded_at: row.get(5)? }))?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+}
+
+#[tauri::command]
+fn end_placement(input: PlacementLifecycleEventInput, database: State<'_, Database>) -> Result<PlacementLifecycleEvent, AppError> {
+    validate_lifecycle_event(&input)?;
+    let connection = database.0.lock().expect("database lock poisoned");
+    let existing = connection.query_row("SELECT id,placement_id,ended_on,reason,notes,recorded_at FROM placement_lifecycle WHERE placement_id=?1", [&input.placement_id], |row| Ok(PlacementLifecycleEvent { id: row.get(0)?, placement_id: row.get(1)?, ended_on: row.get(2)?, reason: row.get(3)?, notes: row.get(4)?, recorded_at: row.get(5)? })).optional()?;
+    if let Some(event) = existing { return Ok(event); }
+    let planted_on: Option<String> = connection.query_row("SELECT planted_on FROM crop_placements WHERE id=?1", [&input.placement_id], |row| row.get(0)).optional()?;
+    let planted_on = planted_on.ok_or_else(|| AppError::Validation("The crop placement does not exist.".into()))?;
+    if input.ended_on < planted_on { return Err(AppError::Validation("End date cannot be before the planting date.".into())); }
+    let event = PlacementLifecycleEvent { id: Uuid::now_v7().to_string(), placement_id: input.placement_id.trim().to_owned(), ended_on: input.ended_on, reason: input.reason, notes: input.notes.trim().to_owned(), recorded_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true) };
+    connection.execute("INSERT INTO placement_lifecycle(id,placement_id,ended_on,reason,notes,recorded_at) VALUES (?1,?2,?3,?4,?5,?6)", params![event.id,event.placement_id,event.ended_on,event.reason,event.notes,event.recorded_at])?;
+    Ok(event)
+}
+
 fn build_backup_json(connection: &Connection, exported_at: &str) -> Result<String, AppError> {
     connection.query_row(
         "SELECT json_object(
@@ -515,6 +562,7 @@ fn build_backup_json(connection: &Connection, exported_at: &str) -> Result<Strin
           'careResults',json(COALESCE((SELECT json_group_array(json_object('id',id,'taskId',task_id,'placementId',placement_id,'kind',kind,'dueOn',due_on,'status',status,'notes',notes,'recordedAt',recorded_at)) FROM care_results),'[]')),
           'harvests',json(COALESCE((SELECT json_group_array(json_object('id',id,'placementId',placement_id,'harvestedOn',harvested_on,'amount',amount,'unit',unit,'notes',notes,'recordedAt',recorded_at)) FROM harvest_records),'[]')),
           'observations',json(COALESCE((SELECT json_group_array(json_object('id',id,'placementId',placement_id,'observedOn',observed_on,'kind',kind,'condition',condition,'notes',notes,'recordedAt',recorded_at)) FROM garden_observations),'[]'))
+          ,'placementLifecycle',json(COALESCE((SELECT json_group_array(json_object('id',id,'placementId',placement_id,'endedOn',ended_on,'reason',reason,'notes',notes,'recordedAt',recorded_at)) FROM placement_lifecycle),'[]'))
         )",
         [exported_at],
         |row| row.get(0),
@@ -554,6 +602,8 @@ pub fn run() {
             save_harvest,
             load_observations,
             save_observation,
+            load_placement_lifecycle,
+            end_placement,
             export_backup
         ])
         .run(tauri::generate_context!())
@@ -608,7 +658,7 @@ mod tests {
         let version: i64 = connection
             .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| row.get(0))
             .expect("migration version");
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
     }
 
     #[test]
@@ -620,7 +670,7 @@ mod tests {
         assert_eq!(value["format"], "horizon-garden-backup");
         assert_eq!(value["formatVersion"], 1);
         assert!(value["setup"].is_null());
-        for key in ["placements", "careResults", "harvests", "observations"] {
+        for key in ["placements", "careResults", "harvests", "observations", "placementLifecycle"] {
             assert_eq!(value[key].as_array().map(Vec::len), Some(0), "{key}");
         }
     }
@@ -682,5 +732,11 @@ mod tests {
     fn rejects_empty_observation_at_native_boundary() {
         let input = GardenObservationInput { placement_id: "placement".into(), observed_on: "2026-09-17".into(), kind: "pest".into(), condition: "watch".into(), notes: " ".into() };
         assert!(matches!(validate_observation(&input), Err(AppError::Validation(_))));
+    }
+
+    #[test]
+    fn rejects_invalid_lifecycle_reason_at_native_boundary() {
+        let input = PlacementLifecycleEventInput { placement_id: "placement".into(), ended_on: "2026-09-18".into(), reason: "deleted".into(), notes: String::new() };
+        assert!(matches!(validate_lifecycle_event(&input), Err(AppError::Validation(_))));
     }
 }
