@@ -1,11 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CareResult, CareResultInput, CropPlacement, CropPlacementInput, GardenObservation, GardenObservationInput, GardenSetupInput, GardenSetupSnapshot, HarvestRecord, HarvestRecordInput } from "@horizon-garden/domain";
+import type { CareResult, CareResultInput, CropPlacement, CropPlacementInput, GardenObservation, GardenObservationInput, GardenSetupInput, GardenSetupSnapshot, HarvestRecord, HarvestRecordInput, PlacementLifecycleEvent, PlacementLifecycleEventInput } from "@horizon-garden/domain";
 
 const previewStorageKey = "horizon-garden-preview-snapshot";
 const previewPlacementsKey = "horizon-garden-preview-placements";
 const previewCareResultsKey = "horizon-garden-preview-care-results";
 const previewHarvestsKey = "horizon-garden-preview-harvests";
 const previewObservationsKey = "horizon-garden-preview-observations";
+const previewLifecycleKey = "horizon-garden-preview-placement-lifecycle";
 
 function isTauri(): boolean {
   return "__TAURI_INTERNALS__" in window;
@@ -97,6 +98,22 @@ export async function saveObservation(input: GardenObservationInput): Promise<Ga
   return observation;
 }
 
+export async function loadPlacementLifecycle(): Promise<PlacementLifecycleEvent[]> {
+  if (isTauri()) return invoke<PlacementLifecycleEvent[]>("load_placement_lifecycle");
+  const stored = localStorage.getItem(previewLifecycleKey);
+  return stored ? (JSON.parse(stored) as PlacementLifecycleEvent[]) : [];
+}
+
+export async function endPlacement(input: PlacementLifecycleEventInput): Promise<PlacementLifecycleEvent> {
+  if (isTauri()) return invoke<PlacementLifecycleEvent>("end_placement", { input });
+  const events = await loadPlacementLifecycle();
+  const existing = events.find((event) => event.placementId === input.placementId);
+  if (existing) return existing;
+  const event: PlacementLifecycleEvent = { ...input, id: crypto.randomUUID(), recordedAt: new Date().toISOString() };
+  localStorage.setItem(previewLifecycleKey, JSON.stringify([...events, event]));
+  return event;
+}
+
 export async function exportBackup(): Promise<string> {
   if (isTauri()) return invoke<string>("export_backup");
   const payload = {
@@ -107,7 +124,8 @@ export async function exportBackup(): Promise<string> {
     placements: await loadPlacements(),
     careResults: await loadCareResults(),
     harvests: await loadHarvests(),
-    observations: await loadObservations()
+    observations: await loadObservations(),
+    placementLifecycle: await loadPlacementLifecycle()
   };
   const filename = `horizon-garden-backup-${new Date().toISOString().slice(0, 10)}.json`;
   const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
