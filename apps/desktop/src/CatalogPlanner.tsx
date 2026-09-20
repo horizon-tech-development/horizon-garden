@@ -219,7 +219,7 @@ export function CatalogPlanner({ growingAreaId, initialPlacements }: Props) {
           <div className="form-grid">
             <label>Crop<select value={harvestPlacementId} onChange={(event) => setHarvestPlacementId(event.target.value)} required>{placements.map((placement) => <option key={placement.id} value={placement.id}>{starterPlantCatalog.find((plant) => plant.id === placement.plantId)?.commonName ?? placement.plantId} · {placement.plantedOn}</option>)}</select></label>
             <label>Harvest date<input type="date" value={harvestedOn} onChange={(event) => setHarvestedOn(event.target.value)} required /></label>
-            <label>Amount<input type="number" min="0.001" max="1000000" step={harvestUnit === "count" ? "1" : "0.001"} value={harvestAmount} onChange={(event) => setHarvestAmount(event.target.value)} required /></label>
+            <label>Amount<input type="number" min={harvestUnit === "count" ? "1" : "0.001"} max="1000000" step={harvestUnit === "count" ? "1" : "0.001"} value={harvestAmount} onChange={(event) => setHarvestAmount(event.target.value)} required /></label>
             <label>Unit<select value={harvestUnit} onChange={(event) => setHarvestUnit(event.target.value as HarvestUnit)}>{harvestUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>
             <label className="full-width">Notes<input value={harvestNotes} maxLength={1000} onChange={(event) => setHarvestNotes(event.target.value)} placeholder="Quality, variety, destination, or preservation notes" /></label>
           </div>
