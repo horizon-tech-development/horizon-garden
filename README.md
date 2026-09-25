@@ -32,3 +32,17 @@ Native desktop development also requires the Rust and Tauri system prerequisites
     pnpm --filter @horizon-garden/desktop tauri dev
 
 See `docs/FOUNDATION.md` and `docs/validation/slice-1-acceptance.md` for the approved scope and current gates.
+
+## Project operations
+
+Operational project state is maintained in [`docs/STATUS.md`](docs/STATUS.md). Portfolio-level priority, owner queues, branch hygiene, and effective WIP state are coordinated through `horizon-tech-development/horizon-ops`.
+
+- Project-reported state: `UNCLASSIFIED`
+- Current phase: `NEEDS_PROJECT_CHAT_REFRESH`
+- CI state: `UNKNOWN`
+- Owner action required: `false`
+- Status confidence: `LOW`
+
+The project-local state above does not by itself determine global execution priority. Horizon Ops assigns the effective portfolio state and enforces the global Finish Lane / Active limits.
+
+Branch age or naming alone is never sufficient reason to delete a branch. Branch cleanup is governed by the central branch-hygiene policy and ancestry/PR/deployment checks.
