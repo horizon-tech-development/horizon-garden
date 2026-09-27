@@ -8,9 +8,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: horizon-garden-ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   validate:
-    runs-on: [self-hosted, Windows, X64, horizon-windows]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -24,19 +28,17 @@ jobs:
       - run: pnpm check
 
   native-check-linux:
-    runs-on: [self-hosted, Linux, X64, horizon-ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Tauri Linux dependencies
+      - name: Install Tauri Linux dependencies
         run: |
-          set -e
-
-          dpkg -s libwebkit2gtk-4.1-dev >/dev/null
-          dpkg -s libayatana-appindicator3-dev >/dev/null
-          dpkg -s librsvg2-dev >/dev/null
-          command -v patchelf >/dev/null
-
-          echo "PASS: Tauri Linux dependencies are installed"
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -46,7 +48,7 @@ jobs:
         run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
 
   native-check-windows:
-    runs-on: [self-hosted, Windows, X64, horizon-windows]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -58,7 +60,7 @@ jobs:
         run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
 
   native-check-macos:
-    runs-on: [self-hosted, macOS, X64, horizon-ci]
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
