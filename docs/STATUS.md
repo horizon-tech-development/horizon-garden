@@ -1,17 +1,17 @@
 ---
 status_schema_version: 1
 project: "Horizon Garden"
-portfolio_state: UNCLASSIFIED
-current_phase: NEEDS_PROJECT_CHAT_REFRESH
+portfolio_state: PARKED
+current_phase: FOUNDATION_PROTOTYPE_PARKED
 release_target: null
 last_reviewed: 2026-09-25
-last_known_good_commit: null
-ci_state: UNKNOWN
+last_known_good_commit: "b484213e9af90f47de3e3db0007f45907bf3eb03"
+ci_state: QUEUED
 deployment_state: UNKNOWN
 owner_action_required: false
 owner_action_count: 0
 assistant_actionable: true
-status_confidence: LOW
+status_confidence: HIGH
 ---
 
 # Project Status
@@ -26,7 +26,7 @@ The project-specific chat should inspect the current repository, recent CI, open
 
 ## Current phase
 
-`NEEDS_PROJECT_CHAT_REFRESH`
+`FOUNDATION_PROTOTYPE_PARKED`
 
 ## Last known good
 
