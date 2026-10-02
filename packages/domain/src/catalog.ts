@@ -1,3 +1,4 @@
+import { isDateOnly } from "./dates.js";
 export const growingSeasons = ["cool", "warm", "perennial"] as const;
 export type GrowingSeason = (typeof growingSeasons)[number];
 
@@ -61,7 +62,8 @@ export function validateCropPlacement(input: CropPlacementInput): CropPlacementI
   if (!input.growingAreaId.trim()) throw new Error("A growing area is required.");
   if (!starterPlantCatalog.some((plant) => plant.id === input.plantId)) throw new Error("Select a known plant.");
   if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 10_000) throw new Error("Quantity must be a whole number between 1 and 10,000.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.plantedOn)) throw new Error("Planting date is required.");
+  if (!isDateOnly(input.plantedOn)) throw new Error("Planting date is invalid.");
   if (input.notes.length > 1_000) throw new Error("Notes cannot exceed 1,000 characters.");
   return { ...input, growingAreaId: input.growingAreaId.trim(), notes: input.notes.trim() };
 }
+

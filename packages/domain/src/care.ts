@@ -1,3 +1,4 @@
+import { parseUtcDate } from "./dates.js";
 import { starterPlantCatalog, type CropPlacement } from "./catalog.js";
 
 export type CareTaskKind = "moisture-check" | "health-check";
@@ -32,12 +33,6 @@ export const starterCareProfiles: CareProfile[] = [
 ];
 
 const dayMilliseconds = 86_400_000;
-
-function parseUtcDate(date: string): Date {
-  const parsed = new Date(`${date}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) throw new Error("Care schedule date is invalid.");
-  return parsed;
-}
 
 function formatUtcDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -78,3 +73,4 @@ export function buildCareSchedule(placements: CropPlacement[], fromOn: string, d
 
   return tasks.sort((left, right) => left.dueOn.localeCompare(right.dueOn) || left.title.localeCompare(right.title));
 }
+
