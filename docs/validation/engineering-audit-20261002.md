@@ -16,9 +16,11 @@ The README described only slice 1 and the status document contained contradictor
 
 - Local `pnpm install --frozen-lockfile` completed with Node 24; available local pnpm was 11.25.0, while hosted CI uses the repository pin 10.19.0.
 - `pnpm check`: lint, strict TypeScript, 51 tests, domain build, and production Vite build passed.
+- Running the date regressions against the original modules produced six failures; restoring the fixes made all 16 focused date/storage tests pass.
+- Local Chromium smoke passed setup, crop placement, harvest/observation recording, rejected pre-plant ending, valid ending, reload persistence, reminder suppression, and JSON backup relationship IDs. This used a temporary browser outside repository dependencies and does not assert native UI acceptance.
 - New regression cases cover impossible/leap dates at every record boundary, malformed formats, schedule rejection and leap-day projection, missing placements, pre-plant endings, normalization, immutable endings, and retained history.
 - Separate diff review checked the actual edits for duplication, hidden failures, speculative abstractions, and scope. One dates module replaces duplicated date handling; no new service architecture or dependencies.
-- Native Rust was unavailable in the local environment. Existing hosted CI validates native tests and Clippy on Linux, Windows, and macOS; exact audit-head and post-merge CI evidence is recorded in STATUS.md after completion.
+- Native Rust was unavailable in the local environment. Existing hosted CI validates native tests and Clippy on Linux, Windows, and macOS; exact audit-head CI #42 passed all four jobs (51 frontend tests and 10 native tests per platform, plus lint/build checks). PR #14 merged after actual diff review; post-merge main verification is tracked in STATUS.md and Horizon Ops.
 
 ## Deferred work
 

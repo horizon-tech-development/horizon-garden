@@ -5,7 +5,7 @@ portfolio_state: PARKED
 current_phase: FOUNDATION_PROTOTYPE_PARKED
 release_target: null
 last_reviewed: 2026-10-02
-last_known_good_commit: "2f931f25959047ba94bcad2ffff5a7e183611197"
+last_known_good_commit: "6757a96df6f77bc34fc6c6952683c1536615a0fc"
 ci_state: PASS
 deployment_state: NOT_CONFIGURED
 owner_action_required: false
@@ -28,7 +28,10 @@ Preserve the parked local-first desktop prototype. This bounded engineering/docu
 
 - Pre-audit main: `2f931f25959047ba94bcad2ffff5a7e183611197`.
 - Verified hosted CI #41: [run 36313127696](https://github.com/horizon-tech-development/horizon-garden/actions/runs/36313127696), success on the exact pre-audit main; frontend validation plus native tests/Clippy on Linux, Windows, and macOS.
-- Audit local validation: lint, strict TypeScript, 51 domain/storage tests, production frontend build, and diff review passed. Cross-platform audit CI must pass before merge; final evidence will be recorded after merge.
+- Audit PR [#14](https://github.com/horizon-tech-development/horizon-garden/pull/14) merged as `bdedffb7057128d17ec2ca96bb3cf5228ac23744` after exact-head CI [#42 / 36997773151](https://github.com/horizon-tech-development/horizon-garden/actions/runs/36997773151) passed on `6757a96df6f77bc34fc6c6952683c1536615a0fc`.
+- CI #42 verified 51 domain/storage tests, lint, strict TypeScript, production frontend build, and 10 native tests plus Clippy on each of Linux, Windows, and macOS. The front-matter last-known-good records that verified audit head; the merge carries the same reviewed implementation.
+- Local Chromium smoke passed setup, placement, harvest/observation records, rejected pre-plant ending, valid ending, reload persistence, reminder suppression, and backup relationship IDs.
+- Post-merge documentation refresh runs the same [main CI workflow](https://github.com/horizon-tech-development/horizon-garden/actions?query=branch%3Amain); final head/run evidence is also maintained in Horizon Ops.
 - Deployment/packaged release: not configured or verified by this audit. No release target.
 
 ## Implemented behavior
@@ -53,7 +56,7 @@ No ongoing product work while parked. When resumed: establish release scope, dep
 
 ## Branch and PR state
 
-At audit start: 14 branches, no open PRs. All 13 non-main historical branches are divergent from pre-audit main (including the status branch). Implemented slices overlap their names but ancestry does not prove full preservation. Retain all branches pending content/PR-history review; none deleted. The audit adds one branch.
+At audit start: 14 branches, no open PRs. All 13 non-main historical branches are divergent from pre-audit main (including the status branch). Implemented slices overlap their names but ancestry does not prove full preservation. Retain all branches pending content/PR-history review; none deleted. The audit adds one branch, now merged and ancestry-contained by main. Total: 15 branches; no open audit PR.
 
 ## Audit record
 
