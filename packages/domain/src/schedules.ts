@@ -1,3 +1,4 @@
+import { parseUtcDate } from "./dates.js";
 import { starterPlantCatalog, type CropPlacement } from "./catalog.js";
 
 export interface HarvestWindow {
@@ -11,8 +12,7 @@ export interface HarvestWindow {
 }
 
 function addUtcDays(date: string, days: number): string {
-  const parsed = new Date(`${date}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) throw new Error("Planting date is invalid.");
+  const parsed = parseUtcDate(date);
   parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
 }
@@ -34,3 +34,4 @@ export function projectHarvestWindow(placement: CropPlacement): HarvestWindow {
 export function buildHarvestSchedule(placements: CropPlacement[]): HarvestWindow[] {
   return placements.map(projectHarvestWindow).sort((left, right) => left.earliestHarvestOn.localeCompare(right.earliestHarvestOn));
 }
+

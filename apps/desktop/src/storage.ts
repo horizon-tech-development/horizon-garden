@@ -1,3 +1,4 @@
+import { validatePlacementLifecycleEvent } from "@horizon-garden/domain";
 import { invoke } from "@tauri-apps/api/core";
 import type { CareResult, CareResultInput, CropPlacement, CropPlacementInput, GardenObservation, GardenObservationInput, GardenSetupInput, GardenSetupSnapshot, HarvestRecord, HarvestRecordInput, PlacementLifecycleEvent, PlacementLifecycleEventInput } from "@horizon-garden/domain";
 
@@ -105,10 +106,14 @@ export async function loadPlacementLifecycle(): Promise<PlacementLifecycleEvent[
 }
 
 export async function endPlacement(input: PlacementLifecycleEventInput): Promise<PlacementLifecycleEvent> {
+  input = validatePlacementLifecycleEvent(input);
   if (isTauri()) return invoke<PlacementLifecycleEvent>("end_placement", { input });
   const events = await loadPlacementLifecycle();
   const existing = events.find((event) => event.placementId === input.placementId);
   if (existing) return existing;
+  const placement = (await loadPlacements()).find((item) => item.id === input.placementId);
+  if (!placement) throw new Error("The crop placement does not exist.");
+  if (input.endedOn < placement.plantedOn) throw new Error("End date cannot be before the planting date.");
   const event: PlacementLifecycleEvent = { ...input, id: crypto.randomUUID(), recordedAt: new Date().toISOString() };
   localStorage.setItem(previewLifecycleKey, JSON.stringify([...events, event]));
   return event;
@@ -136,3 +141,4 @@ export async function exportBackup(): Promise<string> {
   URL.revokeObjectURL(url);
   return filename;
 }
+

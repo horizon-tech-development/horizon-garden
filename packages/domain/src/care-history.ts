@@ -1,3 +1,4 @@
+import { isDateOnly } from "./dates.js";
 import type { CareTask, CareTaskKind } from "./care.js";
 
 export const careResultStatuses = ["completed", "skipped"] as const;
@@ -17,10 +18,6 @@ export interface CareResult extends CareResultInput {
   recordedAt: string;
 }
 
-function isDateOnly(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00.000Z`).getTime());
-}
-
 export function validateCareResult(input: CareResultInput): CareResultInput {
   if (!input.taskId.trim() || !input.placementId.trim()) throw new Error("A care task and placement are required.");
   if (!["moisture-check", "health-check"].includes(input.kind)) throw new Error("Care task kind is invalid.");
@@ -35,3 +32,4 @@ export function unresolvedCareTasks(tasks: CareTask[], results: CareResult[]): C
   const resolvedTaskIds = new Set(results.map((result) => result.taskId));
   return tasks.filter((task) => !resolvedTaskIds.has(task.id));
 }
+

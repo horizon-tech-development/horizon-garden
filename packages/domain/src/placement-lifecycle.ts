@@ -1,3 +1,4 @@
+import { isDateOnly } from "./dates.js";
 import type { CropPlacement } from "./catalog.js";
 
 export const placementEndReasons = ["harvest-complete", "crop-failed", "removed", "season-ended"] as const;
@@ -17,7 +18,7 @@ export interface PlacementLifecycleEvent extends PlacementLifecycleEventInput {
 
 export function validatePlacementLifecycleEvent(input: PlacementLifecycleEventInput): PlacementLifecycleEventInput {
   if (!input.placementId.trim()) throw new Error("A crop placement is required.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.endedOn)) throw new Error("End date is required.");
+  if (!isDateOnly(input.endedOn)) throw new Error("End date is invalid.");
   if (!placementEndReasons.includes(input.reason)) throw new Error("Select a valid end reason.");
   if (input.notes.length > 1_000) throw new Error("Lifecycle notes cannot exceed 1,000 characters.");
   return { ...input, placementId: input.placementId.trim(), notes: input.notes.trim() };
@@ -40,3 +41,4 @@ export function placementIsActiveOn(placementId: string, events: PlacementLifecy
   const ended = placementEndEvent(placementId, events);
   return !ended || ended.endedOn >= on;
 }
+

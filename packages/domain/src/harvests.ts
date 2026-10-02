@@ -1,3 +1,4 @@
+import { isDateOnly } from "./dates.js";
 export const harvestUnits = ["count", "g", "kg", "oz", "lb"] as const;
 export type HarvestUnit = (typeof harvestUnits)[number];
 
@@ -12,10 +13,6 @@ export interface HarvestRecordInput {
 export interface HarvestRecord extends HarvestRecordInput {
   id: string;
   recordedAt: string;
-}
-
-function isDateOnly(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00.000Z`).getTime());
 }
 
 export function validateHarvestRecord(input: HarvestRecordInput): HarvestRecordInput {
@@ -33,3 +30,4 @@ export function validateHarvestRecord(input: HarvestRecordInput): HarvestRecordI
 export function harvestsForPlacement(records: HarvestRecord[], placementId: string): HarvestRecord[] {
   return records.filter((record) => record.placementId === placementId).sort((left, right) => right.harvestedOn.localeCompare(left.harvestedOn));
 }
+

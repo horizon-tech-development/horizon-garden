@@ -1,3 +1,4 @@
+import { isDateOnly } from "./dates.js";
 export const observationKinds = ["general", "growth", "pest", "disease", "damage", "weather"] as const;
 export type ObservationKind = (typeof observationKinds)[number];
 
@@ -14,10 +15,6 @@ export interface GardenObservationInput {
 
 export interface GardenObservation extends GardenObservationInput { id: string; recordedAt: string; }
 
-function isDateOnly(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00.000Z`).getTime());
-}
-
 export function validateGardenObservation(input: GardenObservationInput): GardenObservationInput {
   const placementId = input.placementId.trim();
   const notes = input.notes.trim();
@@ -29,3 +26,4 @@ export function validateGardenObservation(input: GardenObservationInput): Garden
   if (notes.length > 2_000) throw new Error("Observation notes cannot exceed 2,000 characters.");
   return { ...input, placementId, notes };
 }
+

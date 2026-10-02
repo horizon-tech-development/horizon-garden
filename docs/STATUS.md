@@ -4,78 +4,61 @@ project: "Horizon Garden"
 portfolio_state: PARKED
 current_phase: FOUNDATION_PROTOTYPE_PARKED
 release_target: null
-last_reviewed: 2026-09-25
-last_known_good_commit: "b484213e9af90f47de3e3db0007f45907bf3eb03"
-ci_state: QUEUED
-deployment_state: UNKNOWN
+last_reviewed: 2026-10-02
+last_known_good_commit: "2f931f25959047ba94bcad2ffff5a7e183611197"
+ci_state: PASS
+deployment_state: NOT_CONFIGURED
 owner_action_required: false
 owner_action_count: 0
-assistant_actionable: true
+assistant_actionable: false
 status_confidence: HIGH
 ---
 
 # Project Status
 
-> This is the repository-level operational source of truth for Horizon Garden. Keep it current when meaningful project state changes. The YAML front matter is intentionally machine-readable so Horizon OS can ingest it later.
+Repository-level operational source of truth. Horizon Ops assigns portfolio execution priority.
 
-## Current objective
+## Current objective and phase
 
-**Needs initial project-chat refresh.**
-
-The project-specific chat should inspect the current repository, recent CI, open pull requests, deployments/builds where applicable, and the latest testing state, then replace this placeholder with the actual current objective.
-
-## Current phase
+Preserve the parked local-first desktop prototype. This bounded engineering/documentation audit fixes existing date and preview lifecycle behavior; it does not authorize new product slices or a release.
 
 `FOUNDATION_PROTOTYPE_PARKED`
 
-## Last known good
+## Last known good and CI
 
-- Commit: _not yet recorded_
-- Build/release: _not yet recorded_
-- Environment/device: _not yet recorded_
+- Pre-audit main: `2f931f25959047ba94bcad2ffff5a7e183611197`.
+- Verified hosted CI #41: [run 36313127696](https://github.com/horizon-tech-development/horizon-garden/actions/runs/36313127696), success on the exact pre-audit main; frontend validation plus native tests/Clippy on Linux, Windows, and macOS.
+- Audit local validation: lint, strict TypeScript, 51 domain/storage tests, production frontend build, and diff review passed. Cross-platform audit CI must pass before merge; final evidence will be recorded after merge.
+- Deployment/packaged release: not configured or verified by this audit. No release target.
 
-## CI and deployment
+## Implemented behavior
 
-- CI: `UNKNOWN`
-- Deployment: `UNKNOWN`
-- Latest verified run: _not yet recorded_
+One editable rectangular growing area; five area types; unit normalization and area/volume calculations; starter catalog/filtering and placements; companion guidance; harvest estimates; recurring care and history; harvest/observation records; JSON export; immutable placement lifecycle. See [FOUNDATION.md](FOUNDATION.md).
 
-## Known blockers
+## Known limitations and release blockers
 
-- Initial status synchronization has not yet been completed by the project-specific chat.
+- The complete beta garden loop is unfinished: multiple areas/layouts, spacing validation, mobile, sync/roles, sourced catalog expansion, and transactional restore/import remain deferred.
+- Native tests/Clippy compile the backend; packaged UI, installer, restart persistence, and physical-device acceptance are not established.
+- Browser localStorage is a separate preview store and uses UUIDv4; native data uses SQLite and UUIDv7. Existing malformed preview data is not silently repaired.
+- Rust dependencies currently have no committed Cargo.lock and use the stable toolchain; native CI resolution is not fully reproducible. Pinning/update policy is follow-up work before a release.
+- No current engineering blocker to preserving the parked prototype.
 
 ## Owner actions required
 
-_None recorded yet. The project-specific chat must add only actions that genuinely require the owner: physical testing, credentials/secrets, account actions, purchases, irreversible decisions, or subjective acceptance._
+None. Hands-on release acceptance becomes relevant only if the project is explicitly resumed toward a release; it is not a current owner queue item.
 
-## Assistant-actionable work
+## Assistant-actionable work and next tasks
 
-- Inspect repository and current branches/PRs.
-- Inspect CI/build/deployment state where access exists.
-- Populate this status document from evidence.
-- Continue safe, unblocked engineering work until a genuine owner gate is reached.
+No ongoing product work while parked. When resumed: establish release scope, dependency pinning/update policy and native persistence/UI acceptance, then address deferred beta requirements. Do not infer authorization from historical feature branches.
 
-## Next tasks
+## Branch and PR state
 
-1. Perform initial project status refresh.
-2. Record the current release target and phase.
-3. Record blockers and owner actions.
-4. Record the next autonomous engineering tasks.
-5. Set the correct portfolio state.
+At audit start: 14 branches, no open PRs. All 13 non-main historical branches are divergent from pre-audit main (including the status branch). Implemented slices overlap their names but ancestry does not prove full preservation. Retain all branches pending content/PR-history review; none deleted. The audit adds one branch.
 
-## Launch/release blockers
+## Audit record
 
-_Not yet assessed._
-
-## Deferred work
-
-_Not yet assessed._
+[Engineering audit — October 2](validation/engineering-audit-20261002.md).
 
 ## Operating rules
 
-- Repository state outranks chat recollection when they conflict.
-- Update this file after meaningful milestones, new blockers, release changes, or owner handoffs.
-- Do not mark work complete because code exists; verify the intended workflow.
-- Keep owner actions minimal and explicit.
-- Prefer continuing safe work autonomously until an owner-only gate is reached.
-- Valid portfolio states are: `FINISH_LANE`, `ACTIVE`, `MAINTENANCE`, `PARKED`, `INCUBATION`.
+Repository evidence outranks chat recollection. Refresh this file after meaningful milestones. Compilation and code existence do not establish release acceptance. Keep owner actions minimal; maintain parked scope until explicitly resumed.
